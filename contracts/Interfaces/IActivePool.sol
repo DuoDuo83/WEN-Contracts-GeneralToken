@@ -12,6 +12,11 @@ interface IActivePool is IPool {
     event ActivePoolLUSDDebtUpdated(uint _LUSDDebt);
     event ActivePoolETHBalanceUpdated(uint _ETH);
 
+    event ActivePoolTokenStableDebtUpdated(address _collToken, uint _LUSDDebt);
+    event ActivePoolCollTokenBalanceUpdated(address _collToken, uint _amount);
+
+
     // --- Functions ---
     function sendETH(address _account, uint _amount) external;
+    function sendCollToken(address _collToken, address _account, uint _amount) external;
 }

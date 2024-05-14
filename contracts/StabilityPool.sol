@@ -15,6 +15,7 @@ import "./Dependencies/LiquitySafeMath128.sol";
 import "./Dependencies/OwnableUpgradeable.sol";
 import "./Dependencies/CheckContract.sol";
 import "./Dependencies/Initializable.sol";
+import "./Dependencies/IERC20.sol";
 
 /*
  * The Stability Pool holds LUSD tokens deposited by Stability Pool depositors.
@@ -233,6 +234,7 @@ contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabi
     // Error trackers for the error correction in the offset calculation
     uint public lastETHError_Offset;
     uint public lastLUSDLossError_Offset;
+    address public collToken;
 
     // --- Events ---
 
@@ -635,7 +637,7 @@ contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabi
         IActivePool activePoolCached = activePool;
 
         // Cancel the liquidated LUSD debt with the LUSD in the stability pool
-        activePoolCached.decreaseLUSDDebt(_debtToOffset);
+        activePoolCached.decreaseTokenStableDebt(collToken, _debtToOffset);
         _decreaseLUSD(_debtToOffset);
 
         // Burn the debt that was successfully offset
@@ -833,7 +835,7 @@ contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabi
 
     // Transfer the LUSD tokens from the user to the Stability Pool's address, and update its recorded LUSD
     function _sendLUSDtoStabilityPool(address _address, uint _amount) internal {
-        lusdToken.sendToPool(_address, address(this), _amount);
+        lusdToken.transferFrom(_address, address(this), _amount);
         uint newTotalLUSDDeposits = totalLUSDDeposits.add(_amount);
         totalLUSDDeposits = newTotalLUSDDeposits;
         emit StabilityPoolLUSDBalanceUpdated(newTotalLUSDDeposits);
@@ -846,15 +848,20 @@ contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabi
         emit StabilityPoolETHBalanceUpdated(newETH);
         emit EtherSent(msg.sender, _amount);
 
-        (bool success, ) = msg.sender.call{ value: _amount }("");
-        require(success, "StabilityPool: sending ETH failed");
+        if (isNativeToken(collToken)) {
+            (bool success, ) = msg.sender.call{ value: _amount }("");
+            require(success, "StabilityPool: sending ETH failed");
+        } else {
+            IERC20(collToken).transfer(msg.sender, _amount);
+        }
+       
     }
 
     // Send LUSD to user and decrease LUSD in Pool
     function _sendLUSDToDepositor(address _depositor, uint LUSDWithdrawal) internal {
         if (LUSDWithdrawal == 0) {return;}
 
-        lusdToken.returnFromPool(address(this), _depositor, LUSDWithdrawal);
+        lusdToken.transfer(_depositor, LUSDWithdrawal);
         _decreaseLUSD(LUSDWithdrawal);
     }
 

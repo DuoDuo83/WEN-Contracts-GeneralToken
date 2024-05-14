@@ -16,4 +16,8 @@ contract CheckContract {
         assembly { size := extcodesize(_account) }
         require(size > 0, "Account code size cannot be zero");
     }
+
+    function isNativeToken(address _tokenAddress) internal pure {
+        return _tokenAddress == address(0x0);
+    }
 }

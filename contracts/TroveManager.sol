@@ -104,7 +104,7 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
     // Error trackers for the trove redistribution calculation
     uint public lastETHError_Redistribution;
     uint public lastLUSDDebtError_Redistribution;
-
+    address public collToken;
     /*
     * --- Variable container structs for liquidations ---
     *
@@ -213,7 +213,7 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
     event TroveSnapshotsUpdated(uint _L_ETH, uint _L_LUSDDebt);
     event TroveIndexUpdated(address _borrower, uint _newIndex);
 
-     enum TroveManagerOperation {
+    enum TroveManagerOperation {
         applyPendingRewards,
         liquidateInNormalMode,
         liquidateInRecoveryMode,
@@ -500,7 +500,7 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
 
         LiquidationTotals memory totals;
 
-        vars.price = priceFeed.fetchPrice();
+        vars.price = priceFeed.fetchPrice(collToken);
         vars.LUSDInStabPool = stabilityPoolCached.getTotalLUSDDeposits();
         vars.recoveryModeAtStart = _checkRecoveryMode(vars.price);
 
@@ -517,7 +517,7 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
         stabilityPoolCached.offset(totals.totalDebtToOffset, totals.totalCollToSendToSP);
         _redistributeDebtAndColl(contractsCache.activePool, contractsCache.defaultPool, totals.totalDebtToRedistribute, totals.totalCollToRedistribute);
         if (totals.totalCollSurplus > 0) {
-            contractsCache.activePool.sendETH(address(collSurplusPool), totals.totalCollSurplus);
+            contractsCache.activePool.sendCollToken(collToken, address(collSurplusPool), totals.totalCollSurplus);
         }
 
         // Update system snapshots
@@ -550,8 +550,8 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
 
         vars.remainingLUSDInStabPool = _LUSDInStabPool;
         vars.backToNormalMode = false;
-        vars.entireSystemDebt = getEntireSystemDebt();
-        vars.entireSystemColl = getEntireSystemColl();
+        vars.entireSystemDebt = getEntireSystemDebt(collToken);
+        vars.entireSystemColl = getEntireSystemColl(collToken);
 
         vars.user = _contractsCache.sortedTroves.getLast();
         address firstUser = _contractsCache.sortedTroves.getFirst();
@@ -642,7 +642,7 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
         LocalVariables_OuterLiquidationFunction memory vars;
         LiquidationTotals memory totals;
 
-        vars.price = priceFeed.fetchPrice();
+        vars.price = priceFeed.fetchPrice(collToken);
         vars.LUSDInStabPool = stabilityPoolCached.getTotalLUSDDeposits();
         vars.recoveryModeAtStart = _checkRecoveryMode(vars.price);
 
@@ -797,9 +797,13 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
 
     // Move a Trove's pending debt and collateral rewards from distributions, from the Default Pool to the Active Pool
     function _movePendingTroveRewardsToActivePool(IActivePool _activePool, IDefaultPool _defaultPool, uint _LUSD, uint _ETH) internal {
-        _defaultPool.decreaseLUSDDebt(_LUSD);
-        _activePool.increaseLUSDDebt(_LUSD);
-        _defaultPool.sendETHToActivePool(_ETH);
+        // _defaultPool.decreaseLUSDDebt(_LUSD);
+        // _activePool.increaseLUSDDebt(_LUSD);
+        // _defaultPool.sendETHToActivePool(_ETH);
+
+        _defaultPool.decreaseTokenStableDebt(collToken, _LUSD);
+        _activePool.increaseTokenStableDebt(collToken, _LUSD);
+        _defaultPool.sendCollTokenToActivePool(collToken, _ETH);
     }
 
     // --- Redemption functions ---
@@ -1221,9 +1225,9 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
         emit LTermsUpdated(L_ETH, L_LUSDDebt);
 
         // Transfer coll and debt from ActivePool to DefaultPool
-        _activePool.decreaseLUSDDebt(_debt);
-        _defaultPool.increaseLUSDDebt(_debt);
-        _activePool.sendETH(address(_defaultPool), _coll);
+        _activePool.decreaseTokenStableDebt(collToken, _debt);
+        _defaultPool.increaseTokenStableDebt(collToken, _debt);
+        _activePool.sendCollToken(collToken, address(_defaultPool), _coll);
     }
 
     function closeTrove(address _borrower) external override {
@@ -1261,8 +1265,8 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
     function _updateSystemSnapshots_excludeCollRemainder(IActivePool _activePool, uint _collRemainder) internal {
         totalStakesSnapshot = totalStakes;
 
-        uint activeColl = _activePool.getETH();
-        uint liquidatedColl = defaultPool.getETH();
+        uint activeColl = _activePool.getTokenCollateral(collToken);
+        uint liquidatedColl = defaultPool.getTokenCollateral(collToken);
         totalCollateralSnapshot = activeColl.sub(_collRemainder).add(liquidatedColl);
 
         emit SystemSnapshotsUpdated(totalStakesSnapshot, totalCollateralSnapshot);

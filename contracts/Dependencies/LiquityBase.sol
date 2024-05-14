@@ -8,6 +8,7 @@ import "../Interfaces/IActivePool.sol";
 import "../Interfaces/IDefaultPool.sol";
 import "../Interfaces/IPriceFeed.sol";
 import "../Interfaces/ILiquityBase.sol";
+import "./SysConfig.sol";
 
 /* 
 * Base contract for TroveManager, BorrowerOperations and StabilityPool. Contains global system constants and
@@ -33,6 +34,9 @@ contract LiquityBase is BaseMath, ILiquityBase {
     uint constant public PERCENT_DIVISOR = 200; // dividing by 200 yields 0.5%
 
     uint constant public BORROWING_FEE_FLOOR = DECIMAL_PRECISION / 1000 * 5; // 0.5%
+    
+    // Amount of LUSD to be locked in gas pool on opening troves
+    uint constant public LUSD_GAS_COMPENSATION = 1e18;
 
     IActivePool public activePool;
 
@@ -56,31 +60,31 @@ contract LiquityBase is BaseMath, ILiquityBase {
         return _entireColl / PERCENT_DIVISOR;
     }
 
-    function getEntireSystemColl() public view returns (uint entireSystemColl) {
-        uint activeColl = activePool.getETH();
+    function getEntireSystemColl(address _collToken) public view returns (uint entireSystemColl) {
+        uint activeColl = activePool.getTokenCollateral(_collToken);
         uint liquidatedColl = defaultPool.getETH();
 
         return activeColl.add(liquidatedColl);
     }
 
-    function getEntireSystemDebt() public view returns (uint entireSystemDebt) {
-        uint activeDebt = activePool.getLUSDDebt();
-        uint closedDebt = defaultPool.getLUSDDebt();
+    function getEntireSystemDebt(address _collToken) public view returns (uint entireSystemDebt) {
+        uint activeDebt = activePool.getTokenStableDebt(_collToken);
+        uint closedDebt = defaultPool.getTokenStableDebt(_collToken);
 
         return activeDebt.add(closedDebt);
     }
 
-    function _getTCR(uint _price) internal view returns (uint TCR) {
-        uint entireSystemColl = getEntireSystemColl();
-        uint entireSystemDebt = getEntireSystemDebt();
+    function _getTCR(address _collToken, uint _price) internal view returns (uint TCR) {
+        uint entireSystemColl = getEntireSystemColl(_collToken);
+        uint entireSystemDebt = getEntireSystemDebt(_collToken);
 
         TCR = LiquityMath._computeCR(entireSystemColl, entireSystemDebt, _price);
 
         return TCR;
     }
 
-    function _checkRecoveryMode(uint _price) internal view returns (bool) {
-        uint TCR = _getTCR(_price);
+    function _checkRecoveryMode(address _collToken, uint _price) internal view returns (bool) {
+        uint TCR = _getTCR(_collToken, _price);
 
         return TCR < CCR;
     }

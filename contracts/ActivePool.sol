@@ -7,6 +7,7 @@ import "./Dependencies/SafeMath.sol";
 import "./Dependencies/OwnableUpgradeable.sol";
 import "./Dependencies/CheckContract.sol";
 import "./Dependencies/Initializable.sol";
+import "./Dependencies/IERC20.sol";
 
 /*
  * The Active Pool holds the ETH collateral and LUSD debt (but not LUSD tokens) for all active troves.
@@ -26,7 +27,8 @@ contract ActivePool is OwnableUpgradeable, CheckContract, IActivePool, Initializ
     address public defaultPoolAddress;
     uint256 internal ETH;  // deposited ether tracker
     uint256 internal LUSDDebt;
-
+    mapping(address => uint256) internal tokenCollateral;
+    mapping(address => uint256) internal tokenStableDebt;
     // --- Events ---
 
     event BorrowerOperationsAddressChanged(address _newBorrowerOperationsAddress);
@@ -83,6 +85,14 @@ contract ActivePool is OwnableUpgradeable, CheckContract, IActivePool, Initializ
         return LUSDDebt;
     }
 
+    function getTokenCollateral(address _collToken) external view returns (uint) {
+        return tokenCollateral[_collToken];
+    }
+
+    function getTokenStableDebt(address _collToken) external view override returns (uint) {
+        return tokenDebt[_collToken];
+    }
+
     // --- Pool functionality ---
 
     function sendETH(address _account, uint _amount) external override {
@@ -105,6 +115,32 @@ contract ActivePool is OwnableUpgradeable, CheckContract, IActivePool, Initializ
         _requireCallerIsBOorTroveMorSP();
         LUSDDebt = LUSDDebt.sub(_amount);
         emit ActivePoolLUSDDebtUpdated(LUSDDebt);
+    }
+
+    function sendCollToken(address _collToken, address _account, uint _amount) external override {
+        _requireCallerIsBOorTroveMorSP();
+        tokenCollateral[_collToken] = tokenCollateral[_collToken].sub(_amount);
+        emit ActivePoolCollTokenBalanceUpdated(_collToken, _amount);
+        emit CollTokenSent(_collToken, _account, _amount);
+
+        if (isNativeToken(_collToken)) {
+            (bool success, ) = _account.call{ value: _amount }("");
+            require(success, "ActivePool: sending Native Token failed");
+            return;
+        }
+        IERC20(_collToken).transfer(_account, _amount);
+    }
+
+    function increaseTokenStableDebt(address _collToken, uint _amount) external override {
+        _requireCallerIsBOorTroveM();
+        tokenStableDebt[_collToken]  = tokenStableDebt[_collToken].add(_amount);
+        emit ActivePoolTokenStableDebtUpdated(_collToken, tokenStableDebt[_collToken]);
+    }
+
+    function decreaseTokenStableDebt(address _collToken, uint _amount) external override {
+        _requireCallerIsBOorTroveMorSP();
+        tokenStableDebt[_collToken] = tokenStableDebt[_collToken].sub(_amount);
+        emit ActivePoolTokenStableDebtUpdated(LUSDDebt);
     }
 
     // --- 'require' functions ---

@@ -11,12 +11,10 @@ import "./Dependencies/BaseMath.sol";
 import "./Dependencies/LiquityMath.sol";
 import "./Dependencies/Initializable.sol";
 
-contract PriceFeed is OwnableUpgradeable, CheckContract, BaseMath, IPriceFeed, Initializable {
+contract CollTokenPriceFeed is OwnableUpgradeable, CheckContract, BaseMath, ICollTokenPriceFeed, Initializable {
     using SafeMath for uint256;
 
     string constant public NAME = "PriceFeed";
-
-    AggregatorV3Interface public priceAggregator;  // Native token Chainlink aggregator
 
     // Use to convert a price answer to an 18-digit precision uint
     uint constant public TARGET_DIGITS = 18;  
@@ -26,9 +24,6 @@ contract PriceFeed is OwnableUpgradeable, CheckContract, BaseMath, IPriceFeed, I
     
     // Maximum deviation allowed between two consecutive Chainlink oracle prices. 18-digit precision.
     uint constant public MAX_PRICE_DEVIATION_FROM_PREVIOUS_ROUND =  5e17; // 50%
-
-    // The last good price seen from an oracle by Liquity
-    uint public lastGoodPrice;
 
     struct ChainlinkFeed {
         AggregatorV3Interface priceAggregator;
@@ -49,12 +44,9 @@ contract PriceFeed is OwnableUpgradeable, CheckContract, BaseMath, IPriceFeed, I
         oraclesUntrusted
     }
 
-    // The current status of the PricFeed, which determines the conditions for the next price fetch attempt
-    Status public status;
-
     mapping (address => ChainlinkFeed) public collTokenPriceFeed;
-    event LastGoodPriceUpdated(uint _lastGoodPrice);
-    event PriceFeedStatusChanged(Status newStatus);
+    event LastGoodPriceUpdated(address _collToken, uint _lastGoodPrice);
+    event PriceFeedStatusChanged(address _collToken, Status newStatus);
 
     constructor() public {
         _disableInitializers();
@@ -65,29 +57,15 @@ contract PriceFeed is OwnableUpgradeable, CheckContract, BaseMath, IPriceFeed, I
     }
 
     // --- Dependency setters ---
-    function setAddresses(address _priceAggregatorAddress) external onlyOwner {
-        checkContract(_priceAggregatorAddress);
-       
-        priceAggregator = AggregatorV3Interface(_priceAggregatorAddress);
-
-        // Explicitly set initial system status
-        status = Status.chainlinkWorking;
-
-        // Get an initial price from Chainlink to serve as first reference for lastGoodPrice
-        ChainlinkResponse memory chainlinkResponse = _getCurrentChainlinkResponse();
-        ChainlinkResponse memory prevChainlinkResponse = _getPrevChainlinkResponse(chainlinkResponse.roundId, chainlinkResponse.decimals);
-        
-        require(!_chainlinkIsBroken(chainlinkResponse, prevChainlinkResponse) && !_chainlinkIsFrozen(chainlinkResponse), 
-            "PriceFeed: Chainlink must be working and current");
-
-        _storeChainlinkPrice(chainlinkResponse);
-    }
-
     function setCollTokenPriceFeed(address _collToken, address _priceAggregatorAddress) external onlyOwner {
         checkContract(_priceAggregatorAddress);
         AggregatorV3Interface collTokenPriceAggregator = AggregatorV3Interface(_priceAggregatorAddress);
-        bool collTokenPriceFeedStatus = Status.chainlinkWorking;
-        
+        collTokenPriceFeed[_collToken].status = Status.chainlinkWorking;
+        collTokenPriceFeed[_collToken].priceAggregator = collTokenPriceAggregator;
+        ChainlinkResponse memory chainlinkResponse = _getCurrentChainlinkResponse(collTokenPriceAggregator);
+        ChainlinkResponse memory prevChainlinkResponse = _getPrevChainlinkResponse(chainlinkResponse.roundId, chainlinkResponse.decimals, collTokenPriceAggregator);
+        require(!_chainlinkIsBroken(chainlinkResponse, prevChainlinkResponse) && !_chainlinkIsFrozen(chainlinkResponse), "PriceFeed: Chainlink must be working and current");
+        _storeChainlinkPrice(_collToken, chainlinkResponse);
     }
 
     // --- Functions ---
@@ -101,27 +79,27 @@ contract PriceFeed is OwnableUpgradeable, CheckContract, BaseMath, IPriceFeed, I
     * Non-view function - it stores the last good price seen by Liquity.
     *
     */
-    function fetchPrice() external override returns (uint) {
+    function fetchPrice(address _collToken) external override returns (address, uint) {
         // Get current and previous price data from Chainlink
-        ChainlinkResponse memory chainlinkResponse = _getCurrentChainlinkResponse();
-        ChainlinkResponse memory prevChainlinkResponse = _getPrevChainlinkResponse(chainlinkResponse.roundId, chainlinkResponse.decimals);
+        ChainlinkResponse memory chainlinkResponse = _getCurrentChainlinkResponse(collTokenPriceFeed[_collToken].priceAggregator);
+        ChainlinkResponse memory prevChainlinkResponse = _getPrevChainlinkResponse(chainlinkResponse.roundId, chainlinkResponse.decimals, collTokenPriceFeed[_collToken].priceAggregator);
 
         if (status == Status.chainlinkWorking) {
             if (_chainlinkIsBroken(chainlinkResponse, prevChainlinkResponse)) {
-                _changeStatus(Status.oraclesUntrusted);
-                return lastGoodPrice; 
+                _changeStatus(_collToken, Status.oraclesUntrusted);
+                return (_collToken, lastGoodPrice); 
             }
 
             // If Chainlink is working, return Chainlink current price (no status change)
-            return _storeChainlinkPrice(chainlinkResponse);
+            return _storeChainlinkPrice(_collToken, chainlinkResponse);
         }
         if (status == Status.oraclesUntrusted) {
             if (!_chainlinkIsBroken(chainlinkResponse, prevChainlinkResponse)) {
-                _changeStatus(Status.chainlinkWorking);
-                return _storeChainlinkPrice(chainlinkResponse);
+                _changeStatus(_collToken, Status.chainlinkWorking);
+                return _storeChainlinkPrice(_collToken, chainlinkResponse);
             }
         }
-        return lastGoodPrice;
+        return collTokenPriceFeed[_collToken].lastGoodPrice;
     }
 
     // --- Helper functions ---
@@ -192,27 +170,27 @@ contract PriceFeed is OwnableUpgradeable, CheckContract, BaseMath, IPriceFeed, I
         return price;
     }
 
-    function _changeStatus(Status _status) internal {
-        status = _status;
-        emit PriceFeedStatusChanged(_status);
+    function _changeStatus(address _collToken, Status _status) internal {
+        collTokenPriceFeed[_collToken].status = _status;
+        emit PriceFeedStatusChanged(_collToken, _status);
     }
 
-    function _storePrice(uint _currentPrice) internal {
-        lastGoodPrice = _currentPrice;
-        emit LastGoodPriceUpdated(_currentPrice);
+    function _storePrice(address _collToken, uint _currentPrice) internal {
+        collTokenPriceFeed[_collToken].lastGoodPrice = _currentPrice;
+        emit LastGoodPriceUpdated(_collToken, _currentPrice);
     }
 
-    function _storeChainlinkPrice(ChainlinkResponse memory _chainlinkResponse) internal returns (uint) {
+    function _storeChainlinkPrice(address _collToken, ChainlinkResponse memory _chainlinkResponse) internal returns (address, uint) {
         uint scaledChainlinkPrice = _scaleChainlinkPriceByDigits(uint256(_chainlinkResponse.answer), _chainlinkResponse.decimals);
-        _storePrice(scaledChainlinkPrice);
+        _storePrice(_collToken, scaledChainlinkPrice);
 
-        return scaledChainlinkPrice;
+        return (_collToken, scaledChainlinkPrice);
     }
 
     // --- Oracle response wrapper functions ---
-    function _getCurrentChainlinkResponse() internal view returns (ChainlinkResponse memory chainlinkResponse) {
+    function _getCurrentChainlinkResponse(AggregatorV3Interface _priceAggregator) internal view returns (ChainlinkResponse memory chainlinkResponse) {
         // First, try to get current decimal precision:
-        try priceAggregator.decimals() returns (uint8 decimals) {
+        try _priceAggregator.decimals() returns (uint8 decimals) {
             // If call to Chainlink succeeds, record the current decimal precision
             chainlinkResponse.decimals = decimals;
         } catch {
@@ -221,7 +199,7 @@ contract PriceFeed is OwnableUpgradeable, CheckContract, BaseMath, IPriceFeed, I
         }
 
         // Secondly, try to get latest price data:
-        try priceAggregator.latestRoundData() returns
+        try _priceAggregator.latestRoundData() returns
         (
             uint80 roundId,
             int256 answer,
@@ -242,14 +220,14 @@ contract PriceFeed is OwnableUpgradeable, CheckContract, BaseMath, IPriceFeed, I
         }
     }
 
-    function _getPrevChainlinkResponse(uint80 _currentRoundId, uint8 _currentDecimals) internal view returns (ChainlinkResponse memory prevChainlinkResponse) {
+    function _getPrevChainlinkResponse(uint80 _currentRoundId, uint8 _currentDecimals, AggregatorV3Interface _priceAggregator) internal view returns (ChainlinkResponse memory prevChainlinkResponse) {
         /*
         * NOTE: Chainlink only offers a current decimals() value - there is no way to obtain the decimal precision used in a 
         * previous round.  We assume the decimals used in the previous round are the same as the current round.
         */
 
         // Try to get the price data from the previous round:
-        try priceAggregator.getRoundData(_currentRoundId - 1) returns 
+        try _priceAggregator.getRoundData(_currentRoundId - 1) returns 
         (
             uint80 roundId,
             int256 answer,

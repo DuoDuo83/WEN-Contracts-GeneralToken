@@ -7,6 +7,7 @@ import "./Dependencies/SafeMath.sol";
 import "./Dependencies/Ownable.sol";
 import "./Dependencies/CheckContract.sol";
 import "./Dependencies/console.sol";
+import "./Dependencies/IERC20.sol";
 
 /*
  * The Default Pool holds the ETH and LUSD debt (but not LUSD tokens) from liquidations that have been redistributed
@@ -22,12 +23,11 @@ contract DefaultPool is Ownable, CheckContract, IDefaultPool {
 
     address public troveManagerAddress;
     address public activePoolAddress;
-    uint256 internal ETH;  // deposited ETH tracker
-    uint256 internal LUSDDebt;  // debt
+
+    mapping(address => uint256) internal tokenCollateral;
+    mapping(address => uint256) internal tokenStableDebt;
 
     event TroveManagerAddressChanged(address _newTroveManagerAddress);
-    event DefaultPoolLUSDDebtUpdated(uint _LUSDDebt);
-    event DefaultPoolETHBalanceUpdated(uint _ETH);
 
     // --- Dependency setters ---
 
@@ -56,37 +56,42 @@ contract DefaultPool is Ownable, CheckContract, IDefaultPool {
     *
     * Not necessarily equal to the the contract's raw ETH balance - ether can be forcibly sent to contracts.
     */
-    function getETH() external view override returns (uint) {
-        return ETH;
+    // --- Getters for public variables. Required by IPool interface ---
+    function getTokenCollateral(address _collToken) external view returns (uint) {
+        return tokenCollateral[_collToken];
     }
 
-    function getLUSDDebt() external view override returns (uint) {
-        return LUSDDebt;
+    function getTokenStableDebt(address _collToken) external view override returns (uint) {
+        return tokenDebt[_collToken];
     }
 
     // --- Pool functionality ---
 
-    function sendETHToActivePool(uint _amount) external override {
+    function sendCollTokenToActivePool(address _collToken, uint _amount) external override {
         _requireCallerIsTroveManager();
         address activePool = activePoolAddress; // cache to save an SLOAD
-        ETH = ETH.sub(_amount);
-        emit DefaultPoolETHBalanceUpdated(ETH);
-        emit EtherSent(activePool, _amount);
+        tokenCollateral[_collToken] = tokenCollateral[_collToken].sub(_amount);
+        emit DefaultPoolCollTokenBalanceUpdated(tokenCollateral[_collToken]);
+        emit CollTokenSent(_collToken, activePool, _amount);
 
-        (bool success, ) = activePool.call{ value: _amount }("");
-        require(success, "DefaultPool: sending ETH failed");
+        if (isNativeToken(_collToken)) {
+            (bool success, ) = activePool.call{ value: _amount }("");
+            require(success, "DefaultPool: sending Native Token failed");
+            return;
+        }
+        IERC20(_collToken).transfer(_account, _amount);
     }
 
-    function increaseLUSDDebt(uint _amount) external override {
-        _requireCallerIsTroveManager();
-        LUSDDebt = LUSDDebt.add(_amount);
-        emit DefaultPoolLUSDDebtUpdated(LUSDDebt);
-    }
+    function increaseTokenStableDebt(address _collToken, uint _amount) external override {
+        _requireCallerIsBOorTroveM();
+        tokenStableDebt[_collToken]  = tokenStableDebt[_collToken].add(_amount);
+        emit ActivePoolTokenStableDebtUpdated(_collToken, tokenStableDebt[_collToken]);
+    } 
 
-    function decreaseLUSDDebt(uint _amount) external override {
-        _requireCallerIsTroveManager();
-        LUSDDebt = LUSDDebt.sub(_amount);
-        emit DefaultPoolLUSDDebtUpdated(LUSDDebt);
+    function decreaseTokenStableDebt(address _collToken, uint _amount) external override {
+        _requireCallerIsBOorTroveMorSP();
+        tokenStableDebt[_collToken] = tokenStableDebt[_collToken].sub(_amount);
+        emit ActivePoolTokenStableDebtUpdated(LUSDDebt);
     }
 
     // --- 'require' functions ---
@@ -103,7 +108,7 @@ contract DefaultPool is Ownable, CheckContract, IDefaultPool {
 
     receive() external payable {
         _requireCallerIsActivePool();
-        ETH = ETH.add(msg.value);
-        emit DefaultPoolETHBalanceUpdated(ETH);
+        tokenCollateral[address(0x0)] = tokenCollateral[address(0x0)].add(msg.value);
+        emit DefaultPoolCollTokenBalanceUpdated(address(0x0));
     }
 }
