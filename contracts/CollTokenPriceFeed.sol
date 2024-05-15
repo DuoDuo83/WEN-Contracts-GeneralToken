@@ -10,6 +10,7 @@ import "./Dependencies/CheckContract.sol";
 import "./Dependencies/BaseMath.sol";
 import "./Dependencies/LiquityMath.sol";
 import "./Dependencies/Initializable.sol";
+import "./Interfaces/ICollTokenPriceFeed.sol";
 
 contract CollTokenPriceFeed is OwnableUpgradeable, CheckContract, BaseMath, ICollTokenPriceFeed, Initializable {
     using SafeMath for uint256;
@@ -28,7 +29,7 @@ contract CollTokenPriceFeed is OwnableUpgradeable, CheckContract, BaseMath, ICol
     struct ChainlinkFeed {
         AggregatorV3Interface priceAggregator;
         uint lastGoodPrice;
-        bool status;
+        Status status;
     }
 
     struct ChainlinkResponse {
@@ -79,21 +80,21 @@ contract CollTokenPriceFeed is OwnableUpgradeable, CheckContract, BaseMath, ICol
     * Non-view function - it stores the last good price seen by Liquity.
     *
     */
-    function fetchPrice(address _collToken) external override returns (address, uint) {
+    function fetchPrice(address _collToken) external override returns (uint) {
         // Get current and previous price data from Chainlink
         ChainlinkResponse memory chainlinkResponse = _getCurrentChainlinkResponse(collTokenPriceFeed[_collToken].priceAggregator);
         ChainlinkResponse memory prevChainlinkResponse = _getPrevChainlinkResponse(chainlinkResponse.roundId, chainlinkResponse.decimals, collTokenPriceFeed[_collToken].priceAggregator);
 
-        if (status == Status.chainlinkWorking) {
+        if (collTokenPriceFeed[_collToken].status == Status.chainlinkWorking) {
             if (_chainlinkIsBroken(chainlinkResponse, prevChainlinkResponse)) {
                 _changeStatus(_collToken, Status.oraclesUntrusted);
-                return (_collToken, lastGoodPrice); 
+                return collTokenPriceFeed[_collToken].lastGoodPrice; 
             }
 
             // If Chainlink is working, return Chainlink current price (no status change)
             return _storeChainlinkPrice(_collToken, chainlinkResponse);
         }
-        if (status == Status.oraclesUntrusted) {
+        if (collTokenPriceFeed[_collToken].status == Status.oraclesUntrusted) {
             if (!_chainlinkIsBroken(chainlinkResponse, prevChainlinkResponse)) {
                 _changeStatus(_collToken, Status.chainlinkWorking);
                 return _storeChainlinkPrice(_collToken, chainlinkResponse);
@@ -180,11 +181,11 @@ contract CollTokenPriceFeed is OwnableUpgradeable, CheckContract, BaseMath, ICol
         emit LastGoodPriceUpdated(_collToken, _currentPrice);
     }
 
-    function _storeChainlinkPrice(address _collToken, ChainlinkResponse memory _chainlinkResponse) internal returns (address, uint) {
+    function _storeChainlinkPrice(address _collToken, ChainlinkResponse memory _chainlinkResponse) internal returns (uint) {
         uint scaledChainlinkPrice = _scaleChainlinkPriceByDigits(uint256(_chainlinkResponse.answer), _chainlinkResponse.decimals);
         _storePrice(_collToken, scaledChainlinkPrice);
 
-        return (_collToken, scaledChainlinkPrice);
+        return scaledChainlinkPrice;
     }
 
     // --- Oracle response wrapper functions ---
