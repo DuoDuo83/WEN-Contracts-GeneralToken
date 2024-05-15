@@ -90,7 +90,7 @@ contract ActivePool is OwnableUpgradeable, CheckContract, IActivePool, Initializ
     }
 
     function getTokenStableDebt(address _collToken) external view override returns (uint) {
-        return tokenDebt[_collToken];
+        return tokenStableDebt[_collToken];
     }
 
     // --- Pool functionality ---
@@ -140,7 +140,7 @@ contract ActivePool is OwnableUpgradeable, CheckContract, IActivePool, Initializ
     function decreaseTokenStableDebt(address _collToken, uint _amount) external override {
         _requireCallerIsBOorTroveMorSP();
         tokenStableDebt[_collToken] = tokenStableDebt[_collToken].sub(_amount);
-        emit ActivePoolTokenStableDebtUpdated(LUSDDebt);
+        emit ActivePoolTokenStableDebtUpdated(_collToken,  tokenStableDebt[_collToken]);
     }
 
     // --- 'require' functions ---

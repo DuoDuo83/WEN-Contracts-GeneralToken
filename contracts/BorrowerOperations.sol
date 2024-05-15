@@ -115,7 +115,7 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
         address _sortedTrovesAddress,
         address _lusdTokenAddress,
         address _lqtyStakingAddress,
-        address _sysConfig,
+        address _sysConfig
     )
         external
         override
@@ -699,13 +699,13 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
 
     function _getTroveManager(address _collToken) internal returns (address) {
         SysConfig.ConfigData memory configData = sysConfig.configData(_collToken);
-        require(configData.troveManager != address(0x0), "Invalid trove manager")
+        require(configData.troveManager != address(0x0), "Invalid trove manager");
         return configData.troveManager;
     }
 
     function _getSortedTroves(address _collToken) internal returns (address) {
         SysConfig.ConfigData memory configData = sysConfig.configData(_collToken);
-        require(configData.sortedTroves != address(0x0), "Invalid trove manager")
+        require(configData.sortedTroves != address(0x0), "Invalid trove manager");
         return configData.sortedTroves;
     }
 

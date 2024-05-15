@@ -4,7 +4,7 @@ pragma solidity 0.6.11;
 pragma experimental ABIEncoderV2;
 
 import "./Ownable.sol";
-import "./Interfaces/ICollTokenPriceFeed.sol"
+import "../Interfaces/ICollTokenPriceFeed.sol";
 
 contract SysConfig is Ownable {
     struct ConfigData {
@@ -27,11 +27,11 @@ contract SysConfig is Ownable {
         return tokenConfigData[_collToken];
     }
 
-    function updateCollTokenPriceFeed(address _collTokenPriceFeed) external onlyOwner {
-        collTokenPriceFeed = ICollTokenPriceFeed(_collTokenPriceFeed);
+    function updateCollTokenPriceFeed(ICollTokenPriceFeed _collTokenPriceFeed) external onlyOwner {
+        collTokenPriceFeed = _collTokenPriceFeed;
     }
 
-    function getCollTokenPriceFeed() view external returns (addess) {
+    function getCollTokenPriceFeed() view external returns (ICollTokenPriceFeed) {
         return collTokenPriceFeed;
     }
 

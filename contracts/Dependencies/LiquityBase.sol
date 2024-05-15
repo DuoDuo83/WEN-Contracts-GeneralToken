@@ -34,9 +34,6 @@ contract LiquityBase is BaseMath, ILiquityBase {
     uint constant public PERCENT_DIVISOR = 200; // dividing by 200 yields 0.5%
 
     uint constant public BORROWING_FEE_FLOOR = DECIMAL_PRECISION / 1000 * 5; // 0.5%
-    
-    // Amount of LUSD to be locked in gas pool on opening troves
-    uint constant public LUSD_GAS_COMPENSATION = 1e18;
 
     IActivePool public activePool;
 

@@ -17,7 +17,7 @@ contract CheckContract {
         require(size > 0, "Account code size cannot be zero");
     }
 
-    function isNativeToken(address _tokenAddress) internal pure {
+    function isNativeToken(address _tokenAddress) internal pure returns (bool) {
         return _tokenAddress == address(0x0);
     }
 }
