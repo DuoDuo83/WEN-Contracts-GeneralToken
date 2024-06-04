@@ -8,7 +8,7 @@ import "./ILUSDToken.sol";
 
 
 // Common interface for the Trove Manager.
-interface ITroveManager is ILiquityBase {
+interface ITroveManager {
     
     // --- Events ---
 
@@ -136,4 +136,9 @@ interface ITroveManager is ILiquityBase {
     function getTCR(uint _price) external view returns (uint);
 
     function checkRecoveryMode(uint _price) external view returns (bool);
+
+    function returnFromPool(address gasPoolAddress, address _liquidator, uint _LUSD) external;
+
+    function burnLUSD(address _account, uint _amount) external;
+
 }

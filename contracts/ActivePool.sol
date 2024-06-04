@@ -3,6 +3,7 @@
 pragma solidity 0.6.11;
 
 import './Interfaces/IActivePool.sol';
+import './Interfaces/ICollTokenReceiver.sol';
 import "./Dependencies/SafeMath.sol";
 import "./Dependencies/OwnableUpgradeable.sol";
 import "./Dependencies/CheckContract.sol";
@@ -85,7 +86,7 @@ contract ActivePool is OwnableUpgradeable, CheckContract, IActivePool, Initializ
         return LUSDDebt;
     }
 
-    function getTokenCollateral(address _collToken) external view returns (uint) {
+    function getTokenCollateral(address _collToken) external view override returns (uint) {
         return tokenCollateral[_collToken];
     }
 
@@ -120,7 +121,7 @@ contract ActivePool is OwnableUpgradeable, CheckContract, IActivePool, Initializ
     function sendCollToken(address _collToken, address _account, uint _amount) external override {
         _requireCallerIsBOorTroveMorSP();
         tokenCollateral[_collToken] = tokenCollateral[_collToken].sub(_amount);
-        emit ActivePoolCollTokenBalanceUpdated(_collToken, _amount);
+        emit ActivePoolCollTokenBalanceUpdated(_collToken, tokenCollateral[_collToken]);
         emit CollTokenSent(_collToken, _account, _amount);
 
         if (isNativeToken(_collToken)) {
@@ -129,6 +130,9 @@ contract ActivePool is OwnableUpgradeable, CheckContract, IActivePool, Initializ
             return;
         }
         IERC20(_collToken).transfer(_account, _amount);
+        if (isContract(_account)) {
+            ICollTokenReceiver(_account).onReceive(_collToken, _amount);
+        }
     }
 
     function increaseTokenStableDebt(address _collToken, uint _amount) external override {
@@ -168,6 +172,13 @@ contract ActivePool is OwnableUpgradeable, CheckContract, IActivePool, Initializ
     }
 
     // --- Fallback function ---
+
+    function onReceive(address _collToken, uint _amount) external override {
+        _requireCallerIsBorrowerOperationsOrDefaultPool();
+
+        tokenCollateral[_collToken] = tokenCollateral[_collToken].add(_amount);
+        emit ActivePoolCollTokenBalanceUpdated(_collToken, tokenCollateral[_collToken]);
+    }
 
     receive() external payable {
         _requireCallerIsBorrowerOperationsOrDefaultPool();

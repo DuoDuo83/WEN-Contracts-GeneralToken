@@ -25,11 +25,11 @@ interface IPool {
 
     function decreaseLUSDDebt(uint _amount) external;
     
-    function getTokenCollateral(address _collToken) external view returns (uint);
+    // function getTokenCollateral(address _collToken) external view returns (uint);
 
-    function getTokenStableDebt(address _collToken) external view returns (uint);
+    // function getTokenStableDebt(address _collToken) external view returns (uint);
 
-    function increaseTokenStableDebt(address _collToken, uint _amount) external;
+    // function increaseTokenStableDebt(address _collToken, uint _amount) external;
 
-    function decreaseTokenStableDebt(address _collToken, uint _amount) external;
+    // function decreaseTokenStableDebt(address _collToken, uint _amount) external;
 }

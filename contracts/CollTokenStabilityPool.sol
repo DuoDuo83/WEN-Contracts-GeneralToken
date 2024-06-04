@@ -9,12 +9,15 @@ import './Interfaces/ITroveManager.sol';
 import './Interfaces/ILUSDToken.sol';
 import './Interfaces/ISortedTroves.sol';
 import "./Interfaces/ICommunityIssuance.sol";
-import "./Dependencies/LiquityBase.sol";
+import "./Dependencies/CollTokenLiquityBase.sol";
 import "./Dependencies/SafeMath.sol";
 import "./Dependencies/LiquitySafeMath128.sol";
 import "./Dependencies/OwnableUpgradeable.sol";
 import "./Dependencies/CheckContract.sol";
 import "./Dependencies/Initializable.sol";
+import "./Dependencies/IERC20.sol";
+import "./Dependencies/SysConfig.sol";
+
 
 /*
  * The Stability Pool holds LUSD tokens deposited by Stability Pool depositors.
@@ -145,10 +148,10 @@ import "./Dependencies/Initializable.sol";
  * The product P (and snapshot P_t) is re-used, as the ratio P/P_t tracks a deposit's depletion due to liquidations.
  *
  */
-contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabilityPool, Initializable {
+contract CollTokenStabilityPool is CollTokenLiquityBase, OwnableUpgradeable, CheckContract, IStabilityPool, Initializable {
     using LiquitySafeMath128 for uint128;
 
-    string constant public NAME = "StabilityPool";
+    string constant public NAME = "CollTokenStabilityPool";
 
     IBorrowerOperations public borrowerOperations;
 
@@ -161,7 +164,7 @@ contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabi
 
     ICommunityIssuance public communityIssuance;
 
-    uint256 internal ETH;  // deposited ether tracker
+    uint256 internal ETH;  // deposited collateral token tracker
 
     // Tracker for LUSD held in the pool. Changes when users deposit/withdraw, and when Trove debt is offset.
     uint256 internal totalLUSDDeposits;
@@ -234,6 +237,10 @@ contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabi
     uint public lastETHError_Offset;
     uint public lastLUSDLossError_Offset;
 
+    address public collToken;
+    SysConfig public sysConfig;
+
+
     // --- Events ---
 
     event StabilityPoolETHBalanceUpdated(uint _newBalance);
@@ -305,7 +312,6 @@ contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabi
         activePool = IActivePool(_activePoolAddress);
         lusdToken = ILUSDToken(_lusdTokenAddress);
         sortedTroves = ISortedTroves(_sortedTrovesAddress);
-        priceFeed = IPriceFeed(_priceFeedAddress);
         communityIssuance = ICommunityIssuance(_communityIssuanceAddress);
 
         emit BorrowerOperationsAddressChanged(_borrowerOperationsAddress);
@@ -465,7 +471,8 @@ contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabi
         emit StabilityPoolETHBalanceUpdated(ETH);
         emit EtherSent(msg.sender, depositorETHGain);
 
-        borrowerOperations.moveETHGainToTrove{ value: depositorETHGain }(msg.sender, _upperHint, _lowerHint);
+        IERC20(collToken).approve(address(borrowerOperations), depositorETHGain);
+        borrowerOperations.moveCollTokenGainToTrove{ value: 0 }(collToken, depositorETHGain, msg.sender, _upperHint, _lowerHint);
     }
 
     // --- LQTY issuance functions ---
@@ -635,13 +642,17 @@ contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabi
         IActivePool activePoolCached = activePool;
 
         // Cancel the liquidated LUSD debt with the LUSD in the stability pool
-        activePoolCached.decreaseLUSDDebt(_debtToOffset);
+        activePoolCached.decreaseTokenStableDebt(collToken, _debtToOffset);
         _decreaseLUSD(_debtToOffset);
 
         // Burn the debt that was successfully offset
-        lusdToken.burn(address(this), _debtToOffset);
+        // lusdToken.burn(address(this), _debtToOffset);
+        lusdToken.approve(address(borrowerOperations), _debtToOffset);
+        borrowerOperations.burnLUSD(_debtToOffset);
 
-        activePoolCached.sendETH(address(this), _collToAdd);
+        activePoolCached.sendCollToken(collToken, address(this), _collToAdd);
+        ETH = ETH.add(msg.value);
+        StabilityPoolETHBalanceUpdated(ETH);
     }
 
     function _decreaseLUSD(uint _amount) internal {
@@ -833,7 +844,7 @@ contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabi
 
     // Transfer the LUSD tokens from the user to the Stability Pool's address, and update its recorded LUSD
     function _sendLUSDtoStabilityPool(address _address, uint _amount) internal {
-        lusdToken.sendToPool(_address, address(this), _amount);
+        lusdToken.transferFrom(_address, address(this), _amount);
         uint newTotalLUSDDeposits = totalLUSDDeposits.add(_amount);
         totalLUSDDeposits = newTotalLUSDDeposits;
         emit StabilityPoolLUSDBalanceUpdated(newTotalLUSDDeposits);
@@ -846,15 +857,20 @@ contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabi
         emit StabilityPoolETHBalanceUpdated(newETH);
         emit EtherSent(msg.sender, _amount);
 
-        (bool success, ) = msg.sender.call{ value: _amount }("");
-        require(success, "StabilityPool: sending ETH failed");
+        if (isNativeToken(collToken)) {
+            (bool success, ) = msg.sender.call{ value: _amount }("");
+            require(success, "StabilityPool: sending ETH failed");
+        } else {
+            IERC20(collToken).transfer(msg.sender, _amount);
+        }
+       
     }
 
     // Send LUSD to user and decrease LUSD in Pool
     function _sendLUSDToDepositor(address _depositor, uint LUSDWithdrawal) internal {
         if (LUSDWithdrawal == 0) {return;}
 
-        lusdToken.returnFromPool(address(this), _depositor, LUSDWithdrawal);
+        lusdToken.transfer(_depositor, LUSDWithdrawal);
         _decreaseLUSD(LUSDWithdrawal);
     }
 
@@ -959,10 +975,10 @@ contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabi
     }
 
     function _requireNoUnderCollateralizedTroves() internal {
-        uint price = priceFeed.fetchPrice();
+        uint price = sysConfig.fetchPrice(collToken);
         address lowestTrove = sortedTroves.getLast();
         uint ICR = troveManager.getCurrentICR(lowestTrove, price);
-        require(ICR >= MCR, "StabilityPool: Cannot withdraw while there are troves with ICR < MCR");
+        require(ICR >= sysConfig.getCollTokenMCR(collToken), "StabilityPool: Cannot withdraw while there are troves with ICR < MCR");
     }
 
     function _requireUserHasDeposit(uint _initialDeposit) internal pure {
@@ -998,13 +1014,5 @@ contract StabilityPool is LiquityBase, OwnableUpgradeable, CheckContract, IStabi
 
     function  _requireValidKickbackRate(uint _kickbackRate) internal pure {
         require (_kickbackRate <= DECIMAL_PRECISION, "StabilityPool: Kickback rate must be in range [0,1]");
-    }
-
-    // --- Fallback function ---
-
-    receive() external payable {
-        _requireCallerIsActivePool();
-        ETH = ETH.add(msg.value);
-        StabilityPoolETHBalanceUpdated(ETH);
     }
 }

@@ -5,24 +5,24 @@ pragma solidity 0.6.11;
 import "./BaseMath.sol";
 import "./LiquityMath.sol";
 import "../Interfaces/IActivePool.sol";
-import "../Interfaces/IDefaultPool.sol";
-import "../Interfaces/IPriceFeed.sol";
-import "../Interfaces/ILiquityBase.sol";
+import "../Interfaces/ICollTokenDefaultPool.sol";
+import "../Interfaces/ICollTokenPriceFeed.sol";
+import "../Interfaces/ICollTokenLiquityBase.sol";
 
 /* 
 * Base contract for TroveManager, BorrowerOperations and StabilityPool. Contains global system constants and
 * common functions. 
 */
-contract LiquityBase is BaseMath, ILiquityBase {
+contract CollTokenLiquityBase is BaseMath {
     using SafeMath for uint;
 
     uint constant public _100pct = 1000000000000000000; // 1e18 == 100%
 
-    // Minimum collateral ratio for individual troves
-    uint constant public MCR = 1300000000000000000; // 130%
+    // // // Minimum collateral ratio for individual troves
+    // uint constant public MCR = 1300000000000000000; // 130%
 
-    // Critical system collateral ratio. If the system's total collateral ratio (TCR) falls below the CCR, Recovery Mode is triggered.
-    uint constant public CCR = 1500000000000000000; // 150%
+    // // Critical system collateral ratio. If the system's total collateral ratio (TCR) falls below the CCR, Recovery Mode is triggered.
+    // uint constant public CCR = 1500000000000000000; // 150%
 
     // Amount of LUSD to be locked in gas pool on opening troves
     uint constant public LUSD_GAS_COMPENSATION = 1e18;
@@ -36,9 +36,7 @@ contract LiquityBase is BaseMath, ILiquityBase {
 
     IActivePool public activePool;
 
-    IDefaultPool public defaultPool;
-
-    IPriceFeed public override priceFeed;
+    ICollTokenDefaultPool public defaultPool;
 
     // --- Gas compensation functions ---
 
@@ -54,35 +52,6 @@ contract LiquityBase is BaseMath, ILiquityBase {
     // Return the amount of ETH to be drawn from a trove's collateral and sent as gas compensation.
     function _getCollGasCompensation(uint _entireColl) internal pure returns (uint) {
         return _entireColl / PERCENT_DIVISOR;
-    }
-
-    function getEntireSystemColl() public view returns (uint entireSystemColl) {
-        uint activeColl = activePool.getETH();
-        uint liquidatedColl = defaultPool.getETH();
-
-        return activeColl.add(liquidatedColl);
-    }
-
-    function getEntireSystemDebt() public view returns (uint entireSystemDebt) {
-        uint activeDebt = activePool.getLUSDDebt();
-        uint closedDebt = defaultPool.getLUSDDebt();
-
-        return activeDebt.add(closedDebt);
-    }
-
-    function _getTCR(uint _price) internal view returns (uint TCR) {
-        uint entireSystemColl = getEntireSystemColl();
-        uint entireSystemDebt = getEntireSystemDebt();
-
-        TCR = LiquityMath._computeCR(entireSystemColl, entireSystemDebt, _price);
-
-        return TCR;
-    }
-
-    function _checkRecoveryMode(uint _price) internal view returns (bool) {
-        uint TCR = _getTCR(_price);
-
-        return TCR < CCR;
     }
 
     function _requireUserAcceptsFee(uint _fee, uint _amount, uint _maxFeePercentage) internal pure {
