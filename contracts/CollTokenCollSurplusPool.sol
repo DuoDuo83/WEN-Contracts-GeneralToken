@@ -34,7 +34,7 @@ contract CollTokenCollSurplusPool is Ownable, CheckContract, ICollSurplusPool, I
 
     event CollBalanceUpdated(address indexed _account, uint _newBalance);
     event EtherSent(address _to, uint _amount);
-    event CollSurplusPoolETHBalanceUpdated(uint _ETH);
+    event CollSurplusPoolCollTokenBalanceUpdated(address _collToken, uint _ETH);
     
     // --- Contract setters ---
 
@@ -59,6 +59,11 @@ contract CollTokenCollSurplusPool is Ownable, CheckContract, ICollSurplusPool, I
         emit TroveManagerAddressChanged(_troveManagerAddress);
         emit ActivePoolAddressChanged(_activePoolAddress);
 
+    }
+
+    function setCollToken(address _collToken) external onlyOwner {
+        require(!isNativeToken(_collToken), "Invalid collToken");
+        collToken = _collToken;
     }
 
     /* Returns the ETH state variable at ActivePool address.
@@ -121,6 +126,6 @@ contract CollTokenCollSurplusPool is Ownable, CheckContract, ICollSurplusPool, I
     function onReceive(address _collToken, uint _amount) external override {
         _requireCallerIsActivePool();
         ETH = ETH.add(_amount);
-        emit CollSurplusPoolETHBalanceUpdated(ETH);
+        emit CollSurplusPoolCollTokenBalanceUpdated(_collToken, ETH);
     }
 }

@@ -37,19 +37,19 @@ interface ITroveManager {
 
     // --- Functions ---
 
-    function setAddresses(
-        address _borrowerOperationsAddress,
-        address _activePoolAddress,
-        address _defaultPoolAddress,
-        address _stabilityPoolAddress,
-        address _gasPoolAddress,
-        address _collSurplusPoolAddress,
-        address _priceFeedAddress,
-        address _lusdTokenAddress,
-        address _sortedTrovesAddress,
-        address _lqtyTokenAddress,
-        address _lqtyStakingAddress
-    ) external;
+    // function setAddresses(
+    //     address _borrowerOperationsAddress,
+    //     address _activePoolAddress,
+    //     address _defaultPoolAddress,
+    //     address _stabilityPoolAddress,
+    //     address _gasPoolAddress,
+    //     address _collSurplusPoolAddress,
+    //     address _priceFeedAddress,
+    //     address _lusdTokenAddress,
+    //     address _sortedTrovesAddress,
+    //     address _lqtyTokenAddress,
+    //     address _lqtyStakingAddress
+    // ) external;
 
     function stabilityPool() external view returns (IStabilityPool);
     function lusdToken() external view returns (ILUSDToken);

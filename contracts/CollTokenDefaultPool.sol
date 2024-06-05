@@ -24,10 +24,9 @@ contract CollTokenDefaultPool is OwnableUpgradeable, CheckContract, ICollTokenDe
 
     string constant public NAME = "CollTokenDefaultPool";
 
-    address public troveManagerAddress;
+     address public troveManagerAddress;
     address public activePoolAddress;
-    mapping(address => uint256) internal tokenCollateral;
-    mapping(address => uint256) internal tokenStableDebt;
+    uint256 internal ETH;  // deposited ETH tracker
     uint256 internal LUSDDebt;  // debt
 
     event TroveManagerAddressChanged(address _newTroveManagerAddress);
@@ -71,29 +70,36 @@ contract CollTokenDefaultPool is OwnableUpgradeable, CheckContract, ICollTokenDe
     */
 
     // --- Pool functionality ---
-    function getTokenCollateral(address _collToken) external view override returns (uint) {
-        return tokenCollateral[_collToken];
-    }
+    // function getTokenCollateral(address _collToken) external view override returns (uint) {
+    //     return tokenCollateral[_collToken];
+    // }
 
-    function getTokenStableDebt(address _collToken) external view override returns (uint) {
-        return tokenStableDebt[_collToken];
-    }
+    // function getTokenStableDebt(address _collToken) external view override returns (uint) {
+    //     return tokenStableDebt[_collToken];
+    // // }
 
-    function decreaseTokenStableDebt(address _collToken, uint _amount) external override {
+    // function decreaseTokenStableDebt(address _collToken, uint _amount) external override {
 
-    }
-    function increaseTokenStableDebt(address _collToken, uint _amount) external override {
+    // }
+    // function increaseTokenStableDebt(address _collToken, uint _amount) external override {
 
-    }
-    function receiveCollToken(address _collToken, uint _amount) external override {
+    // }
+    // function receiveCollToken(address _collToken, uint _amount) external override {
 
-    }
+    // }
    
+    function getETH() external view override returns (uint) {
+        return ETH;
+    }
+
+    function getLUSDDebt() external view override returns (uint) {
+        return LUSDDebt;
+    }
     
     function sendCollTokenToActivePool(address _collToken, uint _amount) external override {
         _requireCallerIsTroveManager();
-        tokenCollateral[_collToken] = tokenCollateral[_collToken].sub(_amount);
-        emit DefaultPoolCollTokenBalanceUpdated(_collToken, tokenCollateral[_collToken]);
+        ETH = ETH.sub(_amount);
+        emit DefaultPoolCollTokenBalanceUpdated(_collToken, ETH);
         emit CollTokenSent(_collToken, activePoolAddress, _amount);
 
         if (isNativeToken(_collToken)) {
@@ -121,7 +127,7 @@ contract CollTokenDefaultPool is OwnableUpgradeable, CheckContract, ICollTokenDe
         _requireCallerIsActivePool();
         require(!isNativeToken(_collToken), "No native token allowed");
 
-        tokenCollateral[_collToken] = tokenCollateral[_collToken].add(_amount);
+        ETH = ETH.add(_amount);
         emit DefaultPoolCollTokenBalanceUpdated(_collToken, _amount);
     }
 

@@ -15,7 +15,7 @@ import "./Interfaces/ICollTokenPriceFeed.sol";
 contract CollTokenPriceFeed is OwnableUpgradeable, CheckContract, BaseMath, ICollTokenPriceFeed, Initializable {
     using SafeMath for uint256;
 
-    string constant public NAME = "PriceFeed";
+    string constant public NAME = "CollTokenPriceFeed";
 
     // Use to convert a price answer to an 18-digit precision uint
     uint constant public TARGET_DIGITS = 18;  

@@ -19,10 +19,10 @@ contract CollTokenLiquityBase is BaseMath {
     uint constant public _100pct = 1000000000000000000; // 1e18 == 100%
 
     // // // Minimum collateral ratio for individual troves
-    // uint constant public MCR = 1300000000000000000; // 130%
+    uint public MCR = 1300000000000000000; // 130%
 
     // // Critical system collateral ratio. If the system's total collateral ratio (TCR) falls below the CCR, Recovery Mode is triggered.
-    // uint constant public CCR = 1500000000000000000; // 150%
+    uint public CCR = 1500000000000000000; // 150%
 
     // Amount of LUSD to be locked in gas pool on opening troves
     uint constant public LUSD_GAS_COMPENSATION = 1e18;

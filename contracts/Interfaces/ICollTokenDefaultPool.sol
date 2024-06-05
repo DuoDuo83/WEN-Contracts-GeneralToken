@@ -21,14 +21,17 @@ interface ICollTokenDefaultPool {
     event DefaultPoolETHBalanceUpdated(uint _ETH);
 
     // --- Functions ---
+    function getETH() external view returns (uint);
+    function getLUSDDebt() external view returns (uint);
+
     // function getTokenCollateral(address _collToken) external view;
     // function getTokenStableDebt(address _collToken) external view;
-    function receiveCollToken(address _collToken, uint _amount) external;
+    // function receiveCollToken(address _collToken, uint _amount) external;
     function sendCollTokenToActivePool(address _collToken, uint _amount) external;
-    function getTokenCollateral(address _collToken) external view returns (uint);
-    function getTokenStableDebt(address _collToken) external view returns (uint);
-    function increaseTokenStableDebt(address _collToken, uint _amount) external;
-    function decreaseTokenStableDebt(address collToken, uint _amount) external;
+    // function getTokenCollateral(address _collToken) external view returns (uint);
+    // function getTokenStableDebt(address _collToken) external view returns (uint);
+    // function increaseTokenStableDebt(address _collToken, uint _amount) external;
+    // function decreaseTokenStableDebt(address collToken, uint _amount) external;
 
     function increaseLUSDDebt(uint _amount) external;
     function decreaseLUSDDebt(uint _amount) external;

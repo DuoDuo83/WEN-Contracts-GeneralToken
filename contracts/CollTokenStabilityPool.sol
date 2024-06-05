@@ -323,6 +323,21 @@ contract CollTokenStabilityPool is CollTokenLiquityBase, OwnableUpgradeable, Che
         emit CommunityIssuanceAddressChanged(_communityIssuanceAddress);
     }
 
+    function setCollToken(address _collToken) external onlyOwner {
+        require(!isNativeToken(_collToken), "Invalid collToken");
+        collToken = _collToken;
+    }
+
+    function setSysConfig(address _sysConfig) external onlyOwner {
+        require(collToken != address(0x0));
+        sysConfig = SysConfig(_sysConfig);
+        CCR = sysConfig.getCollTokenCCR(collToken, 0);
+        MCR = sysConfig.getCollTokenMCR(collToken, 0);
+
+        require(CCR != 0, "!CCR");
+        require(MCR != 0, "!MCR");
+    }
+
     // --- Getters for public variables. Required by IPool interface ---
 
     function getETH() external view override returns (uint) {
@@ -472,7 +487,7 @@ contract CollTokenStabilityPool is CollTokenLiquityBase, OwnableUpgradeable, Che
         emit EtherSent(msg.sender, depositorETHGain);
 
         IERC20(collToken).approve(address(borrowerOperations), depositorETHGain);
-        borrowerOperations.moveCollTokenGainToTrove{ value: 0 }(collToken, depositorETHGain, msg.sender, _upperHint, _lowerHint);
+        borrowerOperations.moveCollTokenGainToTrove(collToken, depositorETHGain, msg.sender, _upperHint, _lowerHint);
     }
 
     // --- LQTY issuance functions ---
@@ -642,7 +657,7 @@ contract CollTokenStabilityPool is CollTokenLiquityBase, OwnableUpgradeable, Che
         IActivePool activePoolCached = activePool;
 
         // Cancel the liquidated LUSD debt with the LUSD in the stability pool
-        activePoolCached.decreaseTokenStableDebt(collToken, _debtToOffset);
+        activePoolCached.decreaseLUSDDebt(_debtToOffset);
         _decreaseLUSD(_debtToOffset);
 
         // Burn the debt that was successfully offset
@@ -650,7 +665,7 @@ contract CollTokenStabilityPool is CollTokenLiquityBase, OwnableUpgradeable, Che
         lusdToken.approve(address(borrowerOperations), _debtToOffset);
         borrowerOperations.burnLUSD(_debtToOffset);
 
-        activePoolCached.sendCollToken(collToken, address(this), _collToAdd);
+        activePoolCached.sendETH(address(this), _collToAdd);
         ETH = ETH.add(msg.value);
         StabilityPoolETHBalanceUpdated(ETH);
     }
@@ -978,7 +993,7 @@ contract CollTokenStabilityPool is CollTokenLiquityBase, OwnableUpgradeable, Che
         uint price = sysConfig.fetchPrice(collToken);
         address lowestTrove = sortedTroves.getLast();
         uint ICR = troveManager.getCurrentICR(lowestTrove, price);
-        require(ICR >= sysConfig.getCollTokenMCR(collToken), "StabilityPool: Cannot withdraw while there are troves with ICR < MCR");
+        require(ICR >= MCR, "StabilityPool: Cannot withdraw while there are troves with ICR < MCR");
     }
 
     function _requireUserHasDeposit(uint _initialDeposit) internal pure {

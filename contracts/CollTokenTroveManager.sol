@@ -108,8 +108,6 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
 
     address public collToken;
     SysConfig public sysConfig;
-    uint MCR;
-    uint CCR;
 
     /*
     * --- Variable container structs for liquidations ---
@@ -245,11 +243,10 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         address _priceFeedAddress,
         address _lusdTokenAddress,
         address _sortedTrovesAddress,
-        address,
+        address, //_lqtyStakingToken
         address _lqtyStakingAddress
     )
         external
-        override
         onlyOwner
     {
         checkContract(_borrowerOperationsAddress);
@@ -268,7 +265,6 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         stabilityPool = IStabilityPool(_stabilityPoolAddress);
         gasPoolAddress = _gasPoolAddress;
         collSurplusPool = ICollSurplusPool(_collSurplusPoolAddress);
-        // priceFeed = ICollTokenPriceFeed(_priceFeedAddress);
         lusdToken = ILUSDToken(_lusdTokenAddress);
         sortedTroves = ISortedTroves(_sortedTrovesAddress);
         lqtyStaking = _lqtyStakingAddress;
@@ -288,8 +284,16 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
     function setCollToken(address _collToken) external onlyOwner {
         require(!isNativeToken(_collToken), "Invalid collToken");
         collToken = _collToken;
-        MCR = sysConfig.getCollTokenMCR(collToken);
-        CCR = sysConfig.getCollTokenCCR(collToken);
+    }
+
+    function setSysConfig(address _sysConfig) external onlyOwner {
+        require(collToken != address(0x0));
+        sysConfig = SysConfig(_sysConfig);
+        CCR = sysConfig.getCollTokenCCR(collToken, 0);
+        MCR = sysConfig.getCollTokenMCR(collToken, 0);
+
+        require(CCR != 0, "!CCR");
+        require(MCR != 0, "!MCR");
     }
 
     // --- Getters ---
@@ -500,7 +504,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
     function liquidateTroves(uint _n) external override {
         ContractsCache memory contractsCache = ContractsCache(
             activePool,
-            sysConfig.getCollTokenDefaultPool(),
+            ICollTokenDefaultPool(sysConfig.getCollTokenDefaultPool(collToken)),
             ILUSDToken(address(0)),
             address(0),
             sortedTroves,
@@ -515,7 +519,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
 
         vars.price = sysConfig.fetchPrice(collToken);
         vars.LUSDInStabPool = stabilityPoolCached.getTotalLUSDDeposits();
-        vars.recoveryModeAtStart = sysConfig._checkRecoveryMode(collToken, vars.price);
+        vars.recoveryModeAtStart = sysConfig.checkRecoveryMode(collToken, vars.price);
 
         // Perform the appropriate liquidation sequence - tally the values, and obtain their totals
         if (vars.recoveryModeAtStart) {
@@ -524,13 +528,13 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
             totals = _getTotalsFromLiquidateTrovesSequence_NormalMode(contractsCache.activePool, contractsCache.defaultPool, vars.price, vars.LUSDInStabPool, _n);
         }
 
-        require(totals.totalDebtInSequence > 0, "TroveManager: nothing to liquidate");
+        require(totals.totalDebtInSequence > 0, "!liquidate");
 
         // Move liquidated ETH and LUSD to the appropriate pools
         stabilityPoolCached.offset(totals.totalDebtToOffset, totals.totalCollToSendToSP);
         _redistributeDebtAndColl(contractsCache.activePool, contractsCache.defaultPool, totals.totalDebtToRedistribute, totals.totalCollToRedistribute);
         if (totals.totalCollSurplus > 0) {
-            contractsCache.activePool.sendCollToken(collToken, address(collSurplusPool), totals.totalCollSurplus);
+            contractsCache.activePool.sendETH(address(collSurplusPool), totals.totalCollSurplus);
         }
 
         // Update system snapshots
@@ -657,7 +661,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
 
         vars.price = sysConfig.fetchPrice(collToken);
         vars.LUSDInStabPool = stabilityPoolCached.getTotalLUSDDeposits();
-        vars.recoveryModeAtStart = sysConfig._checkRecoveryMode(collToken, vars.price);
+        vars.recoveryModeAtStart = sysConfig.checkRecoveryMode(collToken, vars.price);
 
         // Perform the appropriate liquidation sequence - tally values and obtain their totals.
         if (vars.recoveryModeAtStart) {
@@ -672,7 +676,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         stabilityPoolCached.offset(totals.totalDebtToOffset, totals.totalCollToSendToSP);
         _redistributeDebtAndColl(activePoolCached, defaultPoolCached, totals.totalDebtToRedistribute, totals.totalCollToRedistribute);
         if (totals.totalCollSurplus > 0) {
-            activePoolCached.sendCollToken(collToken, address(collSurplusPool), totals.totalCollSurplus);
+            activePoolCached.sendETH(address(collSurplusPool), totals.totalCollSurplus);
         }
 
         // Update system snapshots
@@ -812,18 +816,18 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         }
 
         if (_ETH > 0) {
-            _activePool.sendCollToken(collToken, _liquidator, _ETH);
+            _activePool.sendETH(_liquidator, _ETH);
         }
     }
 
     // Move a Trove's pending debt and collateral rewards from distributions, from the Default Pool to the Active Pool
     function _movePendingTroveRewardsToActivePool(IActivePool _activePool, ICollTokenDefaultPool _defaultPool, uint _LUSD, uint _ETH) internal {
-        // _defaultPool.decreaseLUSDDebt(_LUSD);
-        // _activePool.increaseLUSDDebt(_LUSD);
+        _defaultPool.decreaseLUSDDebt(_LUSD);
+        _activePool.increaseLUSDDebt(_LUSD);
         // _defaultPool.sendETHToActivePool(_ETH);
 
-        _defaultPool.decreaseTokenStableDebt(collToken, _LUSD);
-        _activePool.increaseTokenStableDebt(collToken, _LUSD);
+        // _defaultPool.decreaseTokenStableDebt(collToken, _LUSD);
+        // _activePool.increaseTokenStableDebt(collToken, _LUSD);
         _defaultPool.sendCollTokenToActivePool(collToken, _ETH);
     }
 
@@ -903,7 +907,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
 
         // send ETH from Active Pool to CollSurplus Pool
         _contractsCache.collSurplusPool.accountSurplus(_borrower, _ETH);
-        _contractsCache.activePool.sendCollToken(collToken, address(_contractsCache.collSurplusPool), _ETH);
+        _contractsCache.activePool.sendETH(address(_contractsCache.collSurplusPool), _ETH);
     }
 
     function _isValidFirstRedemptionHint(ISortedTroves _sortedTroves, address _firstRedemptionHint, uint _price) internal view returns (bool) {
@@ -1024,7 +1028,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         _requireUserAcceptsFee(totals.ETHFee, totals.totalETHDrawn, _maxFeePercentage);
 
         // Send the ETH fee to the LQTY staking contract
-        contractsCache.activePool.sendCollToken(collToken, address(contractsCache.lqtyStaking), totals.ETHFee);
+        contractsCache.activePool.sendETH(address(contractsCache.lqtyStaking), totals.ETHFee);
 
         totals.ETHToSendToRedeemer = totals.totalETHDrawn.sub(totals.ETHFee);
 
@@ -1034,7 +1038,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         sysConfig.burnLUSD(msg.sender, totals.totalLUSDToRedeem);
         // Update Active Pool LUSD, and send ETH to account
         contractsCache.activePool.decreaseLUSDDebt(totals.totalLUSDToRedeem);
-        contractsCache.activePool.sendCollToken(collToken, msg.sender, totals.ETHToSendToRedeemer);
+        contractsCache.activePool.sendETH(msg.sender, totals.ETHToSendToRedeemer);
     }
 
     // --- Helper functions ---
@@ -1246,9 +1250,9 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         emit LTermsUpdated(L_ETH, L_LUSDDebt);
 
         // Transfer coll and debt from ActivePool to DefaultPool
-        _activePool.decreaseTokenStableDebt(collToken, _debt);
-        _defaultPool.increaseTokenStableDebt(collToken, _debt);
-        _activePool.sendCollToken(collToken, address(_defaultPool), _coll);
+        _activePool.decreaseLUSDDebt(_debt);
+        _defaultPool.increaseLUSDDebt(_debt);
+        _activePool.sendETH(address(_defaultPool), _coll);
     }
 
     function closeTrove(address _borrower) external override {
@@ -1286,8 +1290,8 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
     function _updateSystemSnapshots_excludeCollRemainder(IActivePool _activePool, uint _collRemainder) internal {
         totalStakesSnapshot = totalStakes;
 
-        uint activeColl = _activePool.getTokenCollateral(collToken);
-        uint liquidatedColl = defaultPool.getTokenCollateral(collToken);
+        uint activeColl = _activePool.getETH();
+        uint liquidatedColl = defaultPool.getETH();
         totalCollateralSnapshot = activeColl.sub(_collRemainder).add(liquidatedColl);
 
         emit SystemSnapshotsUpdated(totalStakesSnapshot, totalCollateralSnapshot);
@@ -1340,11 +1344,11 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
     // --- Recovery Mode and TCR functions ---
 
     function getTCR(uint _price) external view override returns (uint) {
-        return sysConfig._getTCR(collToken, _price);
+        return sysConfig.getTCR(collToken, _price);
     }
 
     function checkRecoveryMode(uint _price) external view override returns (bool) {
-        return sysConfig._checkRecoveryMode(collToken, _price);
+        return sysConfig.checkRecoveryMode(collToken, _price);
     }
 
     // Check whether or not the system *would be* in Recovery Mode, given an ETH:USD price, and the entire system coll and debt.
@@ -1416,7 +1420,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
 
     function _calcRedemptionFee(uint _redemptionRate, uint _ETHDrawn) internal pure returns (uint) {
         uint redemptionFee = _redemptionRate.mul(_ETHDrawn).div(DECIMAL_PRECISION);
-        require(redemptionFee < _ETHDrawn, "TroveManager: Fee would eat up all returned collateral");
+        require(redemptionFee < _ETHDrawn, "!fee");
         return redemptionFee;
     }
 
@@ -1489,27 +1493,27 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
     // --- 'require' wrapper functions ---
 
     function _requireCallerIsBorrowerOperations() internal view {
-        require(msg.sender == borrowerOperationsAddress, "TroveManager: Caller is not the BorrowerOperations contract");
+        require(msg.sender == borrowerOperationsAddress, "!BorrowerOperations");
     }
 
     function _requireTroveIsActive(address _borrower) internal view {
-        require(Troves[_borrower].status == Status.active, "TroveManager: Trove does not exist or is closed");
+        require(Troves[_borrower].status == Status.active, "!Trove");
     }
 
     function _requireLUSDBalanceCoversRedemption(ILUSDToken _lusdToken, address _redeemer, uint _amount) internal view {
-        require(_lusdToken.balanceOf(_redeemer) >= _amount, "TroveManager: Requested redemption amount must be <= user's LUSD token balance");
+        require(_lusdToken.balanceOf(_redeemer) >= _amount, "!amount");
     }
 
     function _requireMoreThanOneTroveInSystem(uint TroveOwnersArrayLength) internal view {
-        require (TroveOwnersArrayLength > 1 && sortedTroves.getSize() > 1, "TroveManager: Only one trove in the system");
+        require (TroveOwnersArrayLength > 1 && sortedTroves.getSize() > 1, "!trove");
     }
 
     function _requireAmountGreaterThanZero(uint _amount) internal pure {
-        require(_amount > 0, "TroveManager: Amount must be greater than zero");
+        require(_amount > 0, "!amount");
     }
 
     function _requireTCRoverMCR(uint _price) internal view {
-        require(sysConfig._getTCR(collToken, _price) >= MCR, "TroveManager: Cannot redeem when TCR < MCR");
+        require(sysConfig.getTCR(collToken, _price) >= MCR, "TCR < MCR");
     }
 
     function _requireValidMaxFeePercentage(uint _maxFeePercentage) internal pure {

@@ -244,7 +244,7 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
         address _lqtyStakingAddress
     )
         external
-        override
+
         onlyOwner
     {
         checkContract(_borrowerOperationsAddress);
