@@ -795,9 +795,4 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
         _collToken;
         return _getCompositeDebt(_debt);
     }
-
-    function _getNetDebt(address _collToken, uint _debt) internal view returns (uint) {
-        SysConfig.ConfigData memory configData = sysConfig.configData(_collToken);
-        return _debt.sub(configData.gasCompensation);
-    }
 }

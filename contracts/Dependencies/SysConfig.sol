@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 
 pragma solidity 0.6.11;
-pragma experimental ABIEncoderV2;
 
 import "./OwnableUpgradeable.sol";
 import "./CheckContract.sol";
@@ -20,8 +19,6 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
     struct ConfigData {
         uint mcr;
         uint ccr;
-        uint gasCompensation;
-        uint minNetDebt;
         address troveManager;
         address sortedTroves;
         address surplusPool;
@@ -68,13 +65,42 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
         }
     }
 
-    function updateConfig(address _collToken, ConfigData memory _tokenConfigData) external onlyOwner {
-       tokenConfigData[_collToken] = _tokenConfigData;
-       troveManagerPool[_tokenConfigData.troveManager] = true;
+    function updateConfig(address _collToken, uint mcr, uint ccr) external onlyOwner {
+        require(mcr > 0, "!mcr");
+        require(ccr > 0, "!mcr");
+        tokenConfigData[_collToken].mcr = mcr;
+        tokenConfigData[_collToken].ccr = ccr;
+        if (tokenConfigData[_collToken].troveManager != address(0x0) && !tokenConfigData[_collToken].enabled) {
+            tokenConfigData[_collToken].enabled = true;
+        }
     }
 
-    function configData(address _collToken) view external returns (ConfigData memory) {
-        return tokenConfigData[_collToken];
+    function setAddresses(address _collToken,
+                          address _troveManager,
+                          address _sortedTroves,
+                          address _surplusPool,
+                          address _stabilityPool,
+                          address _defaultPool,
+                          address _activePool
+    ) external onlyOwner {
+        checkContract(_troveManager);
+        checkContract(_sortedTroves);
+        checkContract(_surplusPool);
+        checkContract(_stabilityPool);
+        checkContract(_defaultPool);
+        checkContract(_activePool);
+
+        tokenConfigData[_collToken].troveManager = _troveManager;
+        tokenConfigData[_collToken].sortedTroves = _sortedTroves;
+        tokenConfigData[_collToken].surplusPool = _surplusPool;
+        tokenConfigData[_collToken].stabilityPool = _stabilityPool;
+        tokenConfigData[_collToken].defaultPool = _defaultPool;
+        tokenConfigData[_collToken].activePool = _activePool;
+
+        if (tokenConfigData[_collToken].mcr > 0 && !tokenConfigData[_collToken].enabled) {
+            tokenConfigData[_collToken].enabled = true;
+        }
+
     }
 
     function updateCollTokenPriceFeed(ICollTokenPriceFeed _collTokenPriceFeed, IPriceFeed _nativeTokenPriceFeed) external onlyOwner {
