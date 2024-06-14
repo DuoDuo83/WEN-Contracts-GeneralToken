@@ -5,13 +5,14 @@ pragma solidity 0.6.11;
 import "./Interfaces/ICollSurplusPool.sol";
 import "./Interfaces/ICollTokenReceiver.sol";
 import "./Dependencies/SafeMath.sol";
-import "./Dependencies/Ownable.sol";
+import "./Dependencies/OwnableUpgradeable.sol";
 import "./Dependencies/CheckContract.sol";
 import "./Dependencies/console.sol";
 import "./Dependencies/IERC20.sol";
+import "./Dependencies/Initializable.sol";
 
 
-contract CollTokenCollSurplusPool is Ownable, CheckContract, ICollSurplusPool, ICollTokenReceiver {
+contract CollTokenCollSurplusPool is OwnableUpgradeable, CheckContract, ICollSurplusPool, ICollTokenReceiver, Initializable {
     using SafeMath for uint256;
 
     string constant public NAME = "CollTokenCollSurplusPool";
@@ -36,6 +37,13 @@ contract CollTokenCollSurplusPool is Ownable, CheckContract, ICollSurplusPool, I
     event EtherSent(address _to, uint _amount);
     event CollSurplusPoolCollTokenBalanceUpdated(address _collToken, uint _ETH);
     
+    constructor() public {
+        _disableInitializers();
+    }
+
+    function initialize() initializer external {
+        __Ownable_init();
+    }
     // --- Contract setters ---
 
     function setAddresses(
