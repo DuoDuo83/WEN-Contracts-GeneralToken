@@ -226,7 +226,7 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
         // Move the LUSD gas compensation to the Gas Pool
         _withdrawLUSD(contractsCache.activePool, gasPoolAddress, LUSD_GAS_COMPENSATION, LUSD_GAS_COMPENSATION);
 
-        emit TroveUpdated(msg.sender, vars.compositeDebt, msg.value, vars.stake, BorrowerOperation.openTrove);
+        emit TroveUpdated(msg.sender, vars.compositeDebt, _collAmount, vars.stake, BorrowerOperation.openTrove);
         emit LUSDBorrowingFeePaid(msg.sender, vars.LUSDFee);
     }
 
@@ -313,8 +313,8 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
             _requireValidMaxFeePercentage(_maxFeePercentage, isRecoveryMode);
             _requireNonZeroDebtChange(_LUSDChange);
         }
-        _requireSingularCollChange(_collWithdrawal);
-        _requireNonZeroAdjustment(_collWithdrawal, _LUSDChange);
+        _requireSingularCollChange(_collChange, _collWithdrawal);
+        _requireNonZeroAdjustment(_collChange, _collWithdrawal, _LUSDChange);
         _requireTroveisActive(contractsCache.troveManager, _borrower);
 
         // Confirm the operation is either a borrower adjusting their own trove, or a pure ETH transfer from the Stability Pool to a trove
@@ -556,16 +556,16 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
 
     // --- 'Require' wrapper functions ---
 
-    function _requireSingularCollChange(uint _collWithdrawal) internal view {
-        require(msg.value == 0 || _collWithdrawal == 0, "BorrowerOperations: Cannot withdraw and add coll");
+    function _requireSingularCollChange(uint _collChange, uint _collWithdrawal) internal pure {
+        require(_collChange == 0 || _collWithdrawal == 0, "BorrowerOperations: Cannot withdraw and add coll");
     }
 
     function _requireCallerIsBorrower(address _borrower) internal view {
         require(msg.sender == _borrower, "BorrowerOps: Caller must be the borrower for a withdrawal");
     }
 
-    function _requireNonZeroAdjustment(uint _collWithdrawal, uint _LUSDChange) internal view {
-        require(msg.value != 0 || _collWithdrawal != 0 || _LUSDChange != 0, "BorrowerOps: There must be either a collateral change or a debt change");
+    function _requireNonZeroAdjustment(uint _collChange, uint _collWithdrawal, uint _LUSDChange) internal pure {
+        require(_collChange != 0 || _collWithdrawal != 0 || _LUSDChange != 0, "BorrowerOps: There must be either a collateral change or a debt change");
     }
 
     function _requireTroveisActive(ITroveManager _troveManager, address _borrower) internal view {
@@ -787,7 +787,7 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
             return address(activePool);
         }
         address collTokenActivePoolAddress = sysConfig.getCollTokenActivePoolAddress(_collToken);
-        require(collTokenActivePoolAddress != address(0x0), "Invalid sorted troves");
+        require(collTokenActivePoolAddress != address(0x0), "Invalid active pool");
         return collTokenActivePoolAddress;
     }
 
