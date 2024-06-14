@@ -81,7 +81,10 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
                           address _surplusPool,
                           address _stabilityPool,
                           address _defaultPool,
-                          address _activePool
+                          address _activePool,
+                          address _nativeTroveManager,
+                          address _nativeTokenPriceFeed,
+                          address _collTokenPriceFeed
     ) external onlyOwner {
         checkContract(_troveManager);
         checkContract(_sortedTroves);
@@ -89,6 +92,9 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
         checkContract(_stabilityPool);
         checkContract(_defaultPool);
         checkContract(_activePool);
+        checkContract(_nativeTroveManager);
+        checkContract(_nativeTokenPriceFeed);
+        checkContract(_collTokenPriceFeed);
 
         tokenConfigData[_collToken].troveManager = _troveManager;
         tokenConfigData[_collToken].sortedTroves = _sortedTroves;
@@ -101,6 +107,9 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
             tokenConfigData[_collToken].enabled = true;
         }
 
+        nativeTokenTroveManager = ITroveManager(_nativeTroveManager);
+        nativeTokenPriceFeed = IPriceFeed(_nativeTokenPriceFeed);
+        collTokenPriceFeed = ICollTokenPriceFeed(_collTokenPriceFeed);
     }
 
     function updateCollTokenPriceFeed(ICollTokenPriceFeed _collTokenPriceFeed, IPriceFeed _nativeTokenPriceFeed) external onlyOwner {

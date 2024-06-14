@@ -24,7 +24,7 @@ contract CollTokenDefaultPool is OwnableUpgradeable, CheckContract, ICollTokenDe
 
     string constant public NAME = "CollTokenDefaultPool";
 
-     address public troveManagerAddress;
+    address public troveManagerAddress;
     address public activePoolAddress;
     uint256 internal ETH;  // deposited ETH tracker
     uint256 internal LUSDDebt;  // debt
@@ -95,7 +95,7 @@ contract CollTokenDefaultPool is OwnableUpgradeable, CheckContract, ICollTokenDe
     function getLUSDDebt() external view override returns (uint) {
         return LUSDDebt;
     }
-    
+
     function sendCollTokenToActivePool(address _collToken, uint _amount) external override {
         _requireCallerIsTroveManager();
         ETH = ETH.sub(_amount);
