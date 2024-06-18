@@ -106,7 +106,7 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
         if (tokenConfigData[_collToken].mcr > 0 && !tokenConfigData[_collToken].enabled) {
             tokenConfigData[_collToken].enabled = true;
         }
-
+        troveManagerPool[_troveManager] = true;
         nativeTokenTroveManager = ITroveManager(_nativeTroveManager);
         nativeTokenPriceFeed = IPriceFeed(_nativeTokenPriceFeed);
         collTokenPriceFeed = ICollTokenPriceFeed(_collTokenPriceFeed);

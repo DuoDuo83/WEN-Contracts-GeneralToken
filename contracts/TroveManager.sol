@@ -280,6 +280,9 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
         emit LQTYStakingAddressChanged(_lqtyStakingAddress);
     }
 
+    function setSysConfig(address _sysConfig) external onlyOwner {
+        sysConfigAddress = _sysConfig;
+    }
     // --- Getters ---
 
     function getTroveOwnersCount() external view override returns (uint) {
