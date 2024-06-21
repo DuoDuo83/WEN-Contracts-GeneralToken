@@ -19,6 +19,7 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
     struct ConfigData {
         uint mcr;
         uint ccr;
+        uint lpr; // liquidation protocol fee ratio, decimals 2
         address troveManager;
         address sortedTroves;
         address surplusPool;
@@ -75,6 +76,11 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
         }
     }
 
+    function updateLpr(address _collToken, uint _lpr) external onlyOwner {
+        require (_lpr < 100, "!lpr");
+        tokenConfigData[_collToken].lpr = _lpr;
+    }
+
     function setAddresses(address _collToken,
                           address _troveManager,
                           address _sortedTroves,
@@ -119,6 +125,12 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
 
     function getCollTokenPriceFeed() view external returns (ICollTokenPriceFeed) {
         return collTokenPriceFeed;
+    }
+
+    function getCollTokenLpf(address _collToken, uint _totalColl) view external returns (uint) {
+        uint lpr = tokenConfigData[_collToken].lpr;
+        uint lpf = _totalColl.mul(lpr).div(100);
+        return lpf;
     }
 
     function getCollTokenCCR(address _collToken, uint _defaultValue) view external returns (uint) {
