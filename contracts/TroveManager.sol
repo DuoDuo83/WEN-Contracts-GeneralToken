@@ -467,7 +467,7 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
         uint _price
     )
         internal
-        pure
+        view
         returns (LiquidationValues memory singleLiquidation)
     {
         singleLiquidation.entireTroveDebt = _entireTroveDebt;
@@ -532,7 +532,7 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
         emit Liquidation(vars.liquidatedDebt, vars.liquidatedColl, totals.totalCollGasCompensation, totals.totalLUSDGasCompensation);
 
         // Send gas compensation to caller
-        _sendGasCompensation(contractsCache.activePool, msg.sender, totals.totalLUSDGasCompensation, totals.totalCollGasCompensation);
+        _sendGasCompensation(contractsCache.activePool, msg.sender, totals.totalLUSDGasCompensation, totals.totalCollGasCompensation, totals.totalCollInSequence);
     }
 
     /*
@@ -674,7 +674,7 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
         emit Liquidation(vars.liquidatedDebt, vars.liquidatedColl, totals.totalCollGasCompensation, totals.totalLUSDGasCompensation);
 
         // Send gas compensation to caller
-        _sendGasCompensation(activePoolCached, msg.sender, totals.totalLUSDGasCompensation, totals.totalCollGasCompensation);
+        _sendGasCompensation(activePoolCached, msg.sender, totals.totalLUSDGasCompensation, totals.totalCollGasCompensation, totals.totalCollInSequence);
     }
 
     /*
@@ -789,13 +789,21 @@ contract TroveManager is LiquityBase, OwnableUpgradeable, CheckContract, ITroveM
         return newTotals;
     }
 
-    function _sendGasCompensation(IActivePool _activePool, address _liquidator, uint _LUSD, uint _ETH) internal {
+    function _getCollGasCompensation(uint _entireColl) internal view returns (uint) {
+        uint lpf = SysConfig(sysConfigAddress).getCollTokenLpf(address(0x0), _entireColl);
+        return _entireColl / PERCENT_DIVISOR + lpf;
+    }
+
+    function _sendGasCompensation(IActivePool _activePool, address _liquidator, uint _LUSD, uint _ETH, uint _totalColl) internal {
         if (_LUSD > 0) {
             lusdToken.returnFromPool(gasPoolAddress, _liquidator, _LUSD);
         }
 
         if (_ETH > 0) {
-            _activePool.sendETH(_liquidator, _ETH);
+            uint totalLpf = SysConfig(sysConfigAddress).getCollTokenLpf(address(0x0), _totalColl);
+            uint collGasCompensation = _ETH.sub(totalLpf);
+            _activePool.sendETH(_liquidator, collGasCompensation);
+            _activePool.sendETH(lqtyStaking, totalLpf);
         }
     }
 

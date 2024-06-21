@@ -243,7 +243,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         address _priceFeedAddress,
         address _lusdTokenAddress,
         address _sortedTrovesAddress,
-        address, //_lqtyStakingToken
+        address _collToken,
         address _lqtyStakingAddress
     )
         external
@@ -268,6 +268,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         lusdToken = ILUSDToken(_lusdTokenAddress);
         sortedTroves = ISortedTroves(_sortedTrovesAddress);
         lqtyStaking = _lqtyStakingAddress;
+        collToken = _collToken;
 
         emit BorrowerOperationsAddressChanged(_borrowerOperationsAddress);
         emit ActivePoolAddressChanged(_activePoolAddress);
@@ -279,11 +280,6 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         emit LUSDTokenAddressChanged(_lusdTokenAddress);
         emit SortedTrovesAddressChanged(_sortedTrovesAddress);
         emit LQTYStakingAddressChanged(_lqtyStakingAddress);
-    }
-
-    function setCollToken(address _collToken) external onlyOwner {
-        require(!isNativeToken(_collToken), "Invalid collToken");
-        collToken = _collToken;
     }
 
     function setSysConfig(address _sysConfig) external onlyOwner {
@@ -545,7 +541,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         emit Liquidation(vars.liquidatedDebt, vars.liquidatedColl, totals.totalCollGasCompensation, totals.totalLUSDGasCompensation);
 
         // Send gas compensation to caller
-        _sendGasCompensation(contractsCache.activePool, msg.sender, totals.totalLUSDGasCompensation, totals.totalCollGasCompensation);
+        _sendGasCompensation(contractsCache.activePool, msg.sender, totals.totalLUSDGasCompensation, totals.totalCollGasCompensation, totals.totalCollInSequence);
     }
 
     /*
@@ -650,7 +646,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
     * Attempt to liquidate a custom list of troves provided by the caller.
     */
     function batchLiquidateTroves(address[] memory _troveArray) public override {
-        require(_troveArray.length != 0, "must not be empty");
+        require(_troveArray.length != 0, "!empty");
 
         IActivePool activePoolCached = activePool;
         ICollTokenDefaultPool defaultPoolCached = defaultPool;
@@ -687,7 +683,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         emit Liquidation(vars.liquidatedDebt, vars.liquidatedColl, totals.totalCollGasCompensation, totals.totalLUSDGasCompensation);
 
         // Send gas compensation to caller
-        _sendGasCompensation(activePoolCached, msg.sender, totals.totalLUSDGasCompensation, totals.totalCollGasCompensation);
+        _sendGasCompensation(activePoolCached, msg.sender, totals.totalLUSDGasCompensation, totals.totalCollGasCompensation, totals.totalCollInSequence);
     }
 
     /*
@@ -810,13 +806,21 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         require(false);
     }
 
-    function _sendGasCompensation(IActivePool _activePool, address _liquidator, uint _LUSD, uint _ETH) internal {
+    function _getCollGasCompensation(uint _entireColl) internal view returns (uint) {
+        uint lpf = sysConfig.getCollTokenLpf(collToken, _entireColl);
+        return _entireColl / PERCENT_DIVISOR + lpf;
+    }
+
+    function _sendGasCompensation(IActivePool _activePool, address _liquidator, uint _LUSD, uint _ETH, uint _totalColl) internal {
         if (_LUSD > 0) {
             sysConfig.returnFromPool(gasPoolAddress, _liquidator, _LUSD);
         }
 
         if (_ETH > 0) {
-            _activePool.sendETH(_liquidator, _ETH);
+            uint totalLpf = sysConfig.getCollTokenLpf(collToken, _totalColl);
+            uint collGasCompensation = _ETH.sub(totalLpf);
+            _activePool.sendETH(_liquidator, collGasCompensation);
+            _activePool.sendETH(lqtyStaking, totalLpf);
         }
     }
 
@@ -1518,7 +1522,7 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
 
     function _requireValidMaxFeePercentage(uint _maxFeePercentage) internal pure {
         require(_maxFeePercentage >= REDEMPTION_FEE_FLOOR && _maxFeePercentage <= DECIMAL_PRECISION,
-            "Max fee percentage must be between 0.5% and 100%");
+            "!maxFeePercentage");
     }
 
     // --- Trove property getters ---
