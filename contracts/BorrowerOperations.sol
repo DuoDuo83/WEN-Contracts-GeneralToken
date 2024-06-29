@@ -179,7 +179,13 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
         LocalVariables_openTrove memory vars;
 
         vars.price = sysConfig.fetchPrice(_collToken);
-        bool isRecoveryMode = sysConfig.checkRecoveryMode(_collToken, vars.price);
+        
+        bool isRecoveryMode;
+        if (isNativeToken(_collToken)) {
+            isRecoveryMode = _checkRecoveryMode(vars.price);
+        } else {
+            isRecoveryMode = sysConfig.checkRecoveryMode(_collToken, vars.price);
+        }
 
         _requireValidMaxFeePercentage(_maxFeePercentage, isRecoveryMode);
         _requireTroveisNotActive(contractsCache.troveManager, msg.sender);
@@ -307,8 +313,13 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
         LocalVariables_adjustTrove memory vars;
 
         vars.price = sysConfig.fetchPrice(_collToken);
-        bool isRecoveryMode = sysConfig.checkRecoveryMode(_collToken, vars.price);
 
+        bool isRecoveryMode;
+        if (isNativeToken(_collToken)) {
+            isRecoveryMode = _checkRecoveryMode(vars.price);
+        } else {
+            isRecoveryMode = sysConfig.checkRecoveryMode(_collToken, vars.price);
+        }
         if (_isDebtIncrease) {
             _requireValidMaxFeePercentage(_maxFeePercentage, isRecoveryMode);
             _requireNonZeroDebtChange(_LUSDChange);
@@ -583,7 +594,11 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
     }
    
     function _requireNotInRecoveryMode(address _collToken, uint _price) internal view {
-        require(!sysConfig.checkRecoveryMode(_collToken, _price), "BorrowerOps: Operation not permitted during Recovery Mode");
+        if (isNativeToken(_collToken)) {
+            require(!_checkRecoveryMode(_price), "BorrowerOps: Operation not permitted during Recovery Mode");
+        } else {
+            require(!sysConfig.checkRecoveryMode(_collToken, _price), "BorrowerOps: Operation not permitted during Recovery Mode");
+        }
     }
 
     function _requireNoCollWithdrawal(uint _collWithdrawal) internal pure {
@@ -750,8 +765,15 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
         view
         returns (uint)
     {
-        uint totalColl = sysConfig.getEntireSystemColl(_collToken);
-        uint totalDebt = sysConfig.getEntireSystemDebt(_collToken);
+        uint totalColl;
+        uint totalDebt;
+        if (isNativeToken(_collToken)) {
+            totalColl = getEntireSystemColl();
+            totalDebt = getEntireSystemDebt();
+        } else {
+            totalColl = sysConfig.getEntireSystemColl(_collToken);
+            totalDebt = sysConfig.getEntireSystemDebt(_collToken);
+        }
 
         totalColl = _isCollIncrease ? totalColl.add(_collChange) : totalColl.sub(_collChange);
         totalDebt = _isDebtIncrease ? totalDebt.add(_debtChange) : totalDebt.sub(_debtChange);
