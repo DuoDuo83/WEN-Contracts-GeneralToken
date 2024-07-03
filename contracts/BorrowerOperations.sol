@@ -92,9 +92,9 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
     event LUSDTokenAddressChanged(address _lusdTokenAddress);
     event LQTYStakingAddressChanged(address _lqtyStakingAddress);
 
-    event TroveCreated(address indexed _borrower, uint arrayIndex);
-    event TroveUpdated(address indexed _borrower, uint _debt, uint _coll, uint stake, BorrowerOperation operation);
-    event LUSDBorrowingFeePaid(address indexed _borrower, uint _LUSDFee);
+    event TroveCreated(address indexed _borrower, address _trove, uint arrayIndex);
+    event TroveUpdated(address indexed _borrower, address _trove, uint _debt, uint _coll, uint stake, BorrowerOperation operation);
+    event LUSDBorrowingFeePaid(address indexed _borrower, address _collToken, uint _LUSDFee);
     
     constructor() public {
         _disableInitializers();
@@ -224,7 +224,7 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
 
         ISortedTroves(_getSortedTroves(_collToken)).insert(msg.sender, vars.NICR, _upperHint, _lowerHint);
         vars.arrayIndex = contractsCache.troveManager.addTroveOwnerToArray(msg.sender);
-        emit TroveCreated(msg.sender, vars.arrayIndex);
+        emit TroveCreated(msg.sender, address(localTroveManager), vars.arrayIndex);
 
         // Move the ether to the Active Pool, and mint the LUSDAmount to the borrower
         _activePoolAddColl(_collToken, contractsCache.activePool, _collAmount);
@@ -232,8 +232,8 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
         // Move the LUSD gas compensation to the Gas Pool
         _withdrawLUSD(contractsCache.activePool, gasPoolAddress, LUSD_GAS_COMPENSATION, LUSD_GAS_COMPENSATION);
 
-        emit TroveUpdated(msg.sender, vars.compositeDebt, _collAmount, vars.stake, BorrowerOperation.openTrove);
-        emit LUSDBorrowingFeePaid(msg.sender, vars.LUSDFee);
+        emit TroveUpdated(msg.sender, address(localTroveManager), vars.compositeDebt, _collAmount, vars.stake, BorrowerOperation.openTrove);
+        emit LUSDBorrowingFeePaid(msg.sender, _collToken, vars.LUSDFee);
     }
 
     // Send ETH as collateral to a trove
@@ -369,8 +369,8 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
         uint newNICR = _getNewNominalICRFromTroveChange(vars.coll, vars.debt, vars.collChange, vars.isCollIncrease, vars.netDebtChange, _isDebtIncrease);
         ISortedTroves(_getSortedTroves(_collToken)).reInsert(_borrower, newNICR, _upperHint, _lowerHint);
 
-        emit TroveUpdated(_borrower, vars.newDebt, vars.newColl, vars.stake, BorrowerOperation.adjustTrove);
-        emit LUSDBorrowingFeePaid(msg.sender,  vars.LUSDFee);
+        emit TroveUpdated(_borrower, address(localTroveManager), vars.newDebt, vars.newColl, vars.stake, BorrowerOperation.adjustTrove);
+        emit LUSDBorrowingFeePaid(msg.sender, _collToken, vars.LUSDFee);
 
         // Use the unmodified _LUSDChange here, as we don't send the fee to the user
         _moveTokensAndETHfromAdjustment(
@@ -423,7 +423,7 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
         troveManagerCached.removeStake(troveOwner);
         troveManagerCached.closeTrove(troveOwner);
 
-        emit TroveUpdated(troveOwner, 0, 0, 0, BorrowerOperation.closeTrove);
+        emit TroveUpdated(troveOwner, address(troveManagerCached), 0, 0, 0, BorrowerOperation.closeTrove);
 
         // Burn the repaid LUSD from the user's balance and the gas compensation from the Gas Pool
         _repayLUSD(activePoolCached, repayer, debt.sub(LUSD_GAS_COMPENSATION));

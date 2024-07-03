@@ -93,6 +93,12 @@
       },
       {
         "indexed": false,
+        "internalType": "address",
+        "name": "_collToken",
+        "type": "address"
+      },
+      {
+        "indexed": false,
         "internalType": "uint256",
         "name": "_LUSDFee",
         "type": "uint256"
@@ -202,6 +208,12 @@
       },
       {
         "indexed": false,
+        "internalType": "address",
+        "name": "_trove",
+        "type": "address"
+      },
+      {
+        "indexed": false,
         "internalType": "uint256",
         "name": "arrayIndex",
         "type": "uint256"
@@ -230,6 +242,12 @@
         "indexed": true,
         "internalType": "address",
         "name": "_borrower",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "_trove",
         "type": "address"
       },
       {
