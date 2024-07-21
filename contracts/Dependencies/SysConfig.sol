@@ -6,6 +6,7 @@ import "./OwnableUpgradeable.sol";
 import "./CheckContract.sol";
 import "./LiquityMath.sol";
 import "./Initializable.sol";
+import "./LiquityBase.sol";
 import "../Interfaces/ICollTokenPriceFeed.sol";
 import "../Interfaces/IPriceFeed.sol";
 import "../Interfaces/ICollTokenDefaultPool.sol";
@@ -15,7 +16,6 @@ import "../Interfaces/IActivePool.sol";
 
 contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
     using SafeMath for uint;
-    uint constant public CCR = 1500000000000000000; // 150%
     struct ConfigData {
         uint mcr;
         uint ccr;
@@ -29,12 +29,13 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
         bool enabled;
     }
 
-    mapping (address => ConfigData) public tokenConfigData;
-    mapping (address => bool) public troveManagerPool;
+    mapping (address => ConfigData) public tokenConfigData; // collToken => ConfigData
+    mapping (address => bool) public troveManagerPool; // collTokenTroveManager => bool
     ITroveManager public nativeTokenTroveManager;
 
     ICollTokenPriceFeed public collTokenPriceFeed;
     IPriceFeed public nativeTokenPriceFeed;
+    address[] public collTokens;
 
     constructor() public {
         _disableInitializers();
@@ -116,6 +117,7 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
         nativeTokenTroveManager = ITroveManager(_nativeTroveManager);
         nativeTokenPriceFeed = IPriceFeed(_nativeTokenPriceFeed);
         collTokenPriceFeed = ICollTokenPriceFeed(_collTokenPriceFeed);
+        collTokens.push(_collToken);
     }
 
     function updateCollTokenPriceFeed(ICollTokenPriceFeed _collTokenPriceFeed, IPriceFeed _nativeTokenPriceFeed) external onlyOwner {
@@ -177,8 +179,7 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
         uint activeColl = IActivePool(activePoolAddress).getETH();
         uint liquidatedColl = ICollTokenDefaultPool(defaultPoolAddress).getETH();
 
-
-        return activeColl.add(liquidatedColl);
+        entireSystemColl = activeColl.add(liquidatedColl);
     }
 
     function getEntireSystemDebt(address _collToken) public view returns (uint entireSystemDebt) {
@@ -187,7 +188,15 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
         uint activeDebt = IActivePool(activePoolAddress).getLUSDDebt();
         uint closedDebt = ICollTokenDefaultPool(defaultPoolAddress).getLUSDDebt();
 
-        return activeDebt.add(closedDebt);
+        entireSystemDebt = activeDebt.add(closedDebt);
+    }
+
+    function getEntireSystemDebt() external view returns (uint entireSystemDebt) {
+        uint totalDebt = LiquityBase(address(nativeTokenTroveManager)).getEntireSystemDebt();
+        for (uint i = 0; i < collTokens.length; i++) {
+            totalDebt += getEntireSystemDebt(collTokens[i]);
+        }
+        entireSystemDebt = totalDebt;
     }
 
     function getTCR(address _collToken, uint _price) public view returns (uint TCR) {
@@ -203,7 +212,7 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
 
         uint TCR = getTCR(_collToken, _price);
 
-        return TCR < CCR;
+        return TCR < tokenConfigData[_collToken].ccr;
     }
 
 }
