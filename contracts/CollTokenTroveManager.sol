@@ -977,9 +977,6 @@ contract CollTokenTroveManager is CollTokenLiquityBase, OwnableUpgradeable, Chec
         _requireLUSDBalanceCoversRedemption(contractsCache.lusdToken, msg.sender, _LUSDamount);
 
         totals.totalLUSDSupplyAtStart = sysConfig.getEntireSystemDebt(collToken);
-        // Confirm redeemer's balance is less than total LUSD supply
-        assert(contractsCache.lusdToken.balanceOf(msg.sender) <= totals.totalLUSDSupplyAtStart);
-
         totals.remainingLUSD = _LUSDamount;
         address currentBorrower;
 
