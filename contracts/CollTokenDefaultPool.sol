@@ -68,26 +68,6 @@ contract CollTokenDefaultPool is OwnableUpgradeable, CheckContract, ICollTokenDe
     *
     * Not necessarily equal to the the contract's raw ETH balance - ether can be forcibly sent to contracts.
     */
-
-    // --- Pool functionality ---
-    // function getTokenCollateral(address _collToken) external view override returns (uint) {
-    //     return tokenCollateral[_collToken];
-    // }
-
-    // function getTokenStableDebt(address _collToken) external view override returns (uint) {
-    //     return tokenStableDebt[_collToken];
-    // // }
-
-    // function decreaseTokenStableDebt(address _collToken, uint _amount) external override {
-
-    // }
-    // function increaseTokenStableDebt(address _collToken, uint _amount) external override {
-
-    // }
-    // function receiveCollToken(address _collToken, uint _amount) external override {
-
-    // }
-   
     function getETH() external view override returns (uint) {
         return ETH;
     }
@@ -98,15 +78,12 @@ contract CollTokenDefaultPool is OwnableUpgradeable, CheckContract, ICollTokenDe
 
     function sendCollTokenToActivePool(address _collToken, uint _amount) external override {
         _requireCallerIsTroveManager();
+        require(!isNativeToken(_collToken), "No native token allowed");
+        
         ETH = ETH.sub(_amount);
         emit DefaultPoolCollTokenBalanceUpdated(_collToken, ETH);
         emit CollTokenSent(_collToken, activePoolAddress, _amount);
 
-        if (isNativeToken(_collToken)) {
-            (bool success, ) = activePoolAddress.call{ value: _amount }("");
-            require(success, "ActivePool: sending Native Token failed");
-            return;
-        }
         IERC20(_collToken).transfer(activePoolAddress, _amount);
         ICollTokenReceiver(activePoolAddress).onReceive(_collToken, _amount);
     }
