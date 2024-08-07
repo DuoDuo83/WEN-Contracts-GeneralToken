@@ -7,7 +7,7 @@ import "./Dependencies/IIOTXStaking.sol";
 
 contract UniIOTXPrice is AggregatorV3Interface {
     IIOTXStaking public iotxStaking;
-    AggregatorV3Interface iotxPriceOracle;
+    AggregatorV3Interface public iotxPriceOracle;
 
     constructor(IIOTXStaking _iotxStaking, AggregatorV3Interface _iotxPriceOracle) public {
         iotxStaking = _iotxStaking;
