@@ -58,5 +58,5 @@ interface IBorrowerOperations {
 
     function getCompositeDebt(uint _debt) external pure returns (uint);
     function burnLUSD(uint _amount) external;
-
+    function mintLUSD(address _account, uint _amount) external;
 }

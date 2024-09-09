@@ -476,6 +476,11 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
         lusdToken.burn(_account, _amount);
     }
 
+    function mintLUSD(address _account, uint _amount) external override {
+        require(msg.sender == address(sysConfig), "Not SysConfig");
+        lusdToken.mint(_account, _amount);
+    }
+
     // --- Helper functions ---
 
     function _triggerBorrowingFee(ITroveManager _troveManager, ILUSDToken _lusdToken, uint _LUSDAmount, uint _maxFeePercentage) internal returns (uint) {

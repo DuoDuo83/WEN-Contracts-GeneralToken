@@ -13,6 +13,7 @@ import "../Interfaces/ICollTokenDefaultPool.sol";
 import "../Interfaces/ITroveManager.sol";
 import "../Interfaces/ICollSurplusPool.sol";
 import "../Interfaces/IActivePool.sol";
+import "../Interfaces/IBorrowerOperations.sol";
 
 contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
     using SafeMath for uint;
@@ -36,6 +37,8 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
     ICollTokenPriceFeed public collTokenPriceFeed;
     IPriceFeed public nativeTokenPriceFeed;
     address[] public collTokens;
+    address public pegStability;
+    address public borrowerOperations;
 
     constructor() public {
         _disableInitializers();
@@ -57,6 +60,11 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
     function burnLUSD(address _account, uint _amount) external {
         require(troveManagerPool[msg.sender], "Not valid trove manager");
         nativeTokenTroveManager.burnLUSD(_account, _amount);
+    }
+
+    function mintLUSD(address _account, uint _amount) external {
+        require(msg.sender == pegStability, "Not valid minter");
+        IBorrowerOperations(borrowerOperations).mintLUSD(_account, _amount);
     }
 
     function fetchPrice(address _collToken) external returns (uint) {
@@ -91,7 +99,9 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
                           address _activePool,
                           address _nativeTroveManager,
                           address _nativeTokenPriceFeed,
-                          address _collTokenPriceFeed
+                          address _collTokenPriceFeed,
+                          address _pegStability,
+                          address _borrowerOperations
     ) external onlyOwner {
         checkContract(_troveManager);
         checkContract(_sortedTroves);
@@ -102,6 +112,8 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
         checkContract(_nativeTroveManager);
         checkContract(_nativeTokenPriceFeed);
         checkContract(_collTokenPriceFeed);
+        checkContract(_pegStability);
+        checkContract(_borrowerOperations);
         
         require(IERC20(_collToken).decimals() == 18, "Colltoken decimals must be 18");
         
@@ -122,6 +134,8 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
         nativeTokenTroveManager = ITroveManager(_nativeTroveManager);
         nativeTokenPriceFeed = IPriceFeed(_nativeTokenPriceFeed);
         collTokenPriceFeed = ICollTokenPriceFeed(_collTokenPriceFeed);
+        pegStability = _pegStability;
+        borrowerOperations = _borrowerOperations;
     }
 
     function updateCollTokenPriceFeed(ICollTokenPriceFeed _collTokenPriceFeed, IPriceFeed _nativeTokenPriceFeed) external onlyOwner {
