@@ -10,10 +10,12 @@ import "./Dependencies/CheckContract.sol";
 import "./Dependencies/console.sol";
 import "./Dependencies/IERC20.sol";
 import "./Dependencies/Initializable.sol";
+import "./Dependencies/SafeERC20.sol";
 
 
 contract CollTokenCollSurplusPool is OwnableUpgradeable, CheckContract, ICollSurplusPool, ICollTokenReceiver, Initializable {
     using SafeMath for uint256;
+    using SafeERC20 for IERC20;
 
     string constant public NAME = "CollTokenCollSurplusPool";
 
@@ -106,7 +108,7 @@ contract CollTokenCollSurplusPool is OwnableUpgradeable, CheckContract, ICollSur
         ETH = ETH.sub(claimableColl);
         emit EtherSent(_account, claimableColl);
 
-        IERC20(collToken).transfer(_account, claimableColl);
+        IERC20(collToken).safeTransfer(_account, claimableColl);
     }
 
     // --- 'require' functions ---
@@ -133,6 +135,7 @@ contract CollTokenCollSurplusPool is OwnableUpgradeable, CheckContract, ICollSur
 
     function onReceive(address _collToken, uint _amount) external override {
         _requireCallerIsActivePool();
+        require(_collToken == collToken, "Incorrect collToken");
         ETH = ETH.add(_amount);
         emit CollSurplusPoolCollTokenBalanceUpdated(_collToken, ETH);
     }

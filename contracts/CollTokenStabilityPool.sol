@@ -17,6 +17,7 @@ import "./Dependencies/CheckContract.sol";
 import "./Dependencies/Initializable.sol";
 import "./Dependencies/IERC20.sol";
 import "./Dependencies/SysConfig.sol";
+import "./Dependencies/SafeERC20.sol";
 
 
 /*
@@ -149,6 +150,7 @@ import "./Dependencies/SysConfig.sol";
  *
  */
 contract CollTokenStabilityPool is CollTokenLiquityBase, OwnableUpgradeable, CheckContract, IStabilityPool, Initializable {
+    using SafeERC20 for IERC20;
     using LiquitySafeMath128 for uint128;
 
     string constant public NAME = "CollTokenStabilityPool";
@@ -325,6 +327,7 @@ contract CollTokenStabilityPool is CollTokenLiquityBase, OwnableUpgradeable, Che
 
     function setCollToken(address _collToken) external onlyOwner {
         require(!isNativeToken(_collToken), "Invalid collToken");
+        require(IERC20(_collToken).decimals() == 18, "Wrong decimal");
         collToken = _collToken;
     }
 
@@ -486,7 +489,8 @@ contract CollTokenStabilityPool is CollTokenLiquityBase, OwnableUpgradeable, Che
         emit StabilityPoolETHBalanceUpdated(ETH);
         emit EtherSent(msg.sender, depositorETHGain);
 
-        IERC20(collToken).approve(address(borrowerOperations), depositorETHGain);
+        IERC20(collToken).approve(address(borrowerOperations), 0);
+        IERC20(collToken).safeApprove(address(borrowerOperations), depositorETHGain);
         borrowerOperations.moveCollTokenGainToTrove(collToken, depositorETHGain, msg.sender, _upperHint, _lowerHint);
     }
 
@@ -662,12 +666,9 @@ contract CollTokenStabilityPool is CollTokenLiquityBase, OwnableUpgradeable, Che
 
         // Burn the debt that was successfully offset
         // lusdToken.burn(address(this), _debtToOffset);
-        lusdToken.approve(address(borrowerOperations), _debtToOffset);
         borrowerOperations.burnLUSD(_debtToOffset);
 
         activePoolCached.sendETH(address(this), _collToAdd);
-        ETH = ETH.add(msg.value);
-        StabilityPoolETHBalanceUpdated(ETH);
     }
 
     function _decreaseLUSD(uint _amount) internal {
@@ -872,13 +873,7 @@ contract CollTokenStabilityPool is CollTokenLiquityBase, OwnableUpgradeable, Che
         emit StabilityPoolETHBalanceUpdated(newETH);
         emit EtherSent(msg.sender, _amount);
 
-        if (isNativeToken(collToken)) {
-            (bool success, ) = msg.sender.call{ value: _amount }("");
-            require(success, "StabilityPool: sending ETH failed");
-        } else {
-            IERC20(collToken).transfer(msg.sender, _amount);
-        }
-       
+        IERC20(collToken).safeTransfer(msg.sender, _amount);
     }
 
     // Send LUSD to user and decrease LUSD in Pool
@@ -1030,4 +1025,16 @@ contract CollTokenStabilityPool is CollTokenLiquityBase, OwnableUpgradeable, Che
     function  _requireValidKickbackRate(uint _kickbackRate) internal pure {
         require (_kickbackRate <= DECIMAL_PRECISION, "StabilityPool: Kickback rate must be in range [0,1]");
     }
+
+    function _requireValidCollToken(address _collToken) internal view {
+        require(_collToken == collToken, "StabilityPool: Invalid collToken");
+    }
+
+    // --- Fallback function ---
+    function onReceive(address _collToken, uint _amount) external {
+        _requireCallerIsActivePool();
+        _requireValidCollToken(_collToken);
+
+        ETH = ETH.add(_amount);
+        StabilityPoolETHBalanceUpdated(ETH);    }
 }

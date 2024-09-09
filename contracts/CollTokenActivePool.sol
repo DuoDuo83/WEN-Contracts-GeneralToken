@@ -9,6 +9,7 @@ import "./Dependencies/OwnableUpgradeable.sol";
 import "./Dependencies/CheckContract.sol";
 import "./Dependencies/Initializable.sol";
 import "./Dependencies/IERC20.sol";
+import "./Dependencies/SafeERC20.sol";
 
 /*
  * The Active Pool holds the ETH collateral and LUSD debt (but not LUSD tokens) for all active troves.
@@ -19,6 +20,7 @@ import "./Dependencies/IERC20.sol";
  */
 contract CollTokenActivePool is OwnableUpgradeable, CheckContract, IActivePool, ICollTokenReceiver, Initializable {
     using SafeMath for uint256;
+    using SafeERC20 for IERC20;
 
     string constant public NAME = "CollTokenActivePool";
 
@@ -98,7 +100,7 @@ contract CollTokenActivePool is OwnableUpgradeable, CheckContract, IActivePool, 
         emit ActivePoolETHBalanceUpdated(ETH);
         emit EtherSent(_account, _amount);
 
-        IERC20(collToken).transfer(_account, _amount);
+        IERC20(collToken).safeTransfer(_account, _amount);
         if (isContract(_account)) {
             ICollTokenReceiver(_account).onReceive(collToken, _amount);
         }
@@ -115,35 +117,6 @@ contract CollTokenActivePool is OwnableUpgradeable, CheckContract, IActivePool, 
         LUSDDebt = LUSDDebt.sub(_amount);
         emit ActivePoolLUSDDebtUpdated(LUSDDebt);
     }
-
-    // function sendCollToken(address _collToken, address _account, uint _amount) external override {
-    //     _requireCallerIsBOorTroveMorSP();
-    //     tokenCollateral[_collToken] = tokenCollateral[_collToken].sub(_amount);
-    //     emit ActivePoolCollTokenBalanceUpdated(_collToken, tokenCollateral[_collToken]);
-    //     emit CollTokenSent(_collToken, _account, _amount);
-
-    //     if (isNativeToken(_collToken)) {
-    //         (bool success, ) = _account.call{ value: _amount }("");
-    //         require(success, "ActivePool: sending Native Token failed");
-    //         return;
-    //     }
-    //     IERC20(_collToken).transfer(_account, _amount);
-    //     if (isContract(_account)) {
-    //         ICollTokenReceiver(_account).onReceive(_collToken, _amount);
-    //     }
-    // }
-
-    // function increaseTokenStableDebt(address _collToken, uint _amount) external override {
-    //     _requireCallerIsBOorTroveM();
-    //     tokenStableDebt[_collToken]  = tokenStableDebt[_collToken].add(_amount);
-    //     emit ActivePoolTokenStableDebtUpdated(_collToken, tokenStableDebt[_collToken]);
-    // }
-
-    // function decreaseTokenStableDebt(address _collToken, uint _amount) external override {
-    //     _requireCallerIsBOorTroveMorSP();
-    //     tokenStableDebt[_collToken] = tokenStableDebt[_collToken].sub(_amount);
-    //     emit ActivePoolTokenStableDebtUpdated(_collToken,  tokenStableDebt[_collToken]);
-    // }
 
     // --- 'require' functions ---
 
@@ -173,6 +146,7 @@ contract CollTokenActivePool is OwnableUpgradeable, CheckContract, IActivePool, 
 
     function onReceive(address _collToken, uint _amount) external override {
         _requireCallerIsBorrowerOperationsOrDefaultPool();
+        require(_collToken == collToken,"Incorrect collToken");
 
         ETH = ETH.add(_amount);
         emit ActivePoolCollTokenBalanceUpdated(_collToken, ETH);

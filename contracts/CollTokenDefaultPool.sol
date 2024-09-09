@@ -11,6 +11,7 @@ import "./Dependencies/CheckContract.sol";
 import "./Dependencies/console.sol";
 import "./Dependencies/OwnableUpgradeable.sol";
 import "./Dependencies/Initializable.sol";
+import "./Dependencies/SafeERC20.sol";
 
 /*
  * The Default Pool holds the ETH and LUSD debt (but not LUSD tokens) from liquidations that have been redistributed
@@ -21,6 +22,7 @@ import "./Dependencies/Initializable.sol";
  */
 contract CollTokenDefaultPool is OwnableUpgradeable, CheckContract, ICollTokenDefaultPool, ICollTokenReceiver, Initializable {
     using SafeMath for uint256;
+    using SafeERC20 for IERC20;
 
     string constant public NAME = "CollTokenDefaultPool";
 
@@ -84,7 +86,7 @@ contract CollTokenDefaultPool is OwnableUpgradeable, CheckContract, ICollTokenDe
         emit DefaultPoolCollTokenBalanceUpdated(_collToken, ETH);
         emit CollTokenSent(_collToken, activePoolAddress, _amount);
 
-        IERC20(_collToken).transfer(activePoolAddress, _amount);
+        IERC20(_collToken).safeTransfer(activePoolAddress, _amount);
         ICollTokenReceiver(activePoolAddress).onReceive(_collToken, _amount);
     }
 

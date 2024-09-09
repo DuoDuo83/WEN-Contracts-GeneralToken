@@ -46,6 +46,8 @@ contract CollTokenPriceFeed is OwnableUpgradeable, CheckContract, BaseMath, ICol
     }
 
     mapping (address => ChainlinkFeed) public collTokenPriceFeed;
+    mapping (address => uint) public tokenHeartbeat;
+
     event LastGoodPriceUpdated(address _collToken, uint _lastGoodPrice);
     event PriceFeedStatusChanged(address _collToken, Status newStatus);
 
@@ -65,8 +67,12 @@ contract CollTokenPriceFeed is OwnableUpgradeable, CheckContract, BaseMath, ICol
         collTokenPriceFeed[_collToken].priceAggregator = collTokenPriceAggregator;
         ChainlinkResponse memory chainlinkResponse = _getCurrentChainlinkResponse(collTokenPriceAggregator);
         ChainlinkResponse memory prevChainlinkResponse = _getPrevChainlinkResponse(chainlinkResponse.roundId, chainlinkResponse.decimals, collTokenPriceAggregator);
-        require(!_chainlinkIsBroken(chainlinkResponse, prevChainlinkResponse) && !_chainlinkIsFrozen(chainlinkResponse), "PriceFeed: Chainlink must be working and current");
+        require(!_chainlinkIsBroken(chainlinkResponse, prevChainlinkResponse) && !_chainlinkIsFrozen(_collToken, chainlinkResponse), "PriceFeed: Chainlink must be working and current");
         _storeChainlinkPrice(_collToken, chainlinkResponse);
+    }
+
+    function setTokenHeartbeat(address _collToken, uint _heartbeat) external onlyOwner {
+        tokenHeartbeat[_collToken] = _heartbeat;
     }
 
     // --- Functions ---
@@ -130,26 +136,12 @@ contract CollTokenPriceFeed is OwnableUpgradeable, CheckContract, BaseMath, ICol
         return false;
     }
 
-    function _chainlinkIsFrozen(ChainlinkResponse memory _response) internal view returns (bool) {
-        return block.timestamp.sub(_response.timestamp) > TIMEOUT;
-    }
-
-    function _chainlinkPriceChangeAboveMax(ChainlinkResponse memory _currentResponse, ChainlinkResponse memory _prevResponse) internal pure returns (bool) {
-        uint currentScaledPrice = _scaleChainlinkPriceByDigits(uint256(_currentResponse.answer), _currentResponse.decimals);
-        uint prevScaledPrice = _scaleChainlinkPriceByDigits(uint256(_prevResponse.answer), _prevResponse.decimals);
-
-        uint minPrice = LiquityMath._min(currentScaledPrice, prevScaledPrice);
-        uint maxPrice = LiquityMath._max(currentScaledPrice, prevScaledPrice);
-
-        /*
-        * Use the larger price as the denominator:
-        * - If price decreased, the percentage deviation is in relation to the the previous price.
-        * - If price increased, the percentage deviation is in relation to the current price.
-        */
-        uint percentDeviation = maxPrice.sub(minPrice).mul(DECIMAL_PRECISION).div(maxPrice);
-
-        // Return true if price has more than doubled, or more than halved.
-        return percentDeviation > MAX_PRICE_DEVIATION_FROM_PREVIOUS_ROUND;
+    function _chainlinkIsFrozen(address _collToken, ChainlinkResponse memory _response) internal view returns (bool) {
+        uint timeout = tokenHeartbeat[_collToken];
+        if (timeout == 0) {
+            timeout = TIMEOUT;
+        }
+        return block.timestamp.sub(_response.timestamp) > timeout;
     }
 
     function _scaleChainlinkPriceByDigits(uint _price, uint _answerDigits) internal pure returns (uint) {

@@ -33,17 +33,22 @@ contract UniIOTXPrice is AggregatorV3Interface {
                                                                             uint256 startedAt,
                                                                             uint256 updatedAt,
                                                                             uint80 answeredInRound) {
-            roundId = _roundId;
-            uint exchangeRatio = iotxStaking.exchangeRatio();
-            (, int currentIOTXPrice,,,) = iotxPriceOracle.latestRoundData();
-            answer = int(exchangeRatio) * currentIOTXPrice / 1e18;
-            startedAt = block.timestamp;
-            updatedAt = block.timestamp;
-            answeredInRound = roundId;
+        roundId = _roundId;
+        uint256 exchangeRatio = iotxStaking.exchangeRatio();
+        (uint80 iotxRoundId, int currentIOTXPrice, uint256 iotxStartedAt, uint256 iotxUpdatedAt, uint80 iotxAnsweredInRound) = iotxPriceOracle.latestRoundData();
 
-            require(answer != 0, "price is 0");
-            require((answer + currentIOTXPrice)/currentIOTXPrice == 2, " invalid price");
-        }
+        require(iotxAnsweredInRound >= iotxRoundId, "Stale price");
+        require(iotxUpdatedAt != 0, "Round not complete");
+        require(block.timestamp - iotxUpdatedAt <= 24 hours, "Price too old");
+
+        answer = _toInt256(exchangeRatio) * currentIOTXPrice / 1e18;
+        startedAt = iotxStartedAt;
+        updatedAt = iotxUpdatedAt;
+        answeredInRound = iotxAnsweredInRound;
+
+        require(answer > 0, "Price <= 0");
+        require((answer + currentIOTXPrice)/currentIOTXPrice == 2, " Invalid price");
+    }
 
     function latestRoundData() external view override returns (
                                                                 uint80 roundId,
@@ -53,5 +58,10 @@ contract UniIOTXPrice is AggregatorV3Interface {
                                                                 uint80 answeredInRound
                                                             ) {
             return getRoundData(100);
-        }
+    }
+
+    function _toInt256(uint256 value) internal pure returns (int256) {
+        require(value < 2**255, "Value doesn't fit in an int256");
+        return int256(value);
+    }
 }

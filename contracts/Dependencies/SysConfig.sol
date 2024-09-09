@@ -69,7 +69,7 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
 
     function updateConfig(address _collToken, uint mcr, uint ccr) external onlyOwner {
         require(mcr > 0, "!mcr");
-        require(ccr > 0, "!mcr");
+        require(ccr > 0, "!ccr");
         tokenConfigData[_collToken].mcr = mcr;
         tokenConfigData[_collToken].ccr = ccr;
         if (tokenConfigData[_collToken].troveManager != address(0x0) && !tokenConfigData[_collToken].enabled) {
@@ -102,7 +102,12 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
         checkContract(_nativeTroveManager);
         checkContract(_nativeTokenPriceFeed);
         checkContract(_collTokenPriceFeed);
-
+        
+        require(IERC20(_collToken).decimals() == 18, "Colltoken decimals must be 18");
+        
+        if (tokenConfigData[_collToken].troveManager != address(0x0)) {
+            collTokens.push(_collToken);
+        }
         tokenConfigData[_collToken].troveManager = _troveManager;
         tokenConfigData[_collToken].sortedTroves = _sortedTroves;
         tokenConfigData[_collToken].surplusPool = _surplusPool;
@@ -117,7 +122,6 @@ contract SysConfig is OwnableUpgradeable, CheckContract, Initializable {
         nativeTokenTroveManager = ITroveManager(_nativeTroveManager);
         nativeTokenPriceFeed = IPriceFeed(_nativeTokenPriceFeed);
         collTokenPriceFeed = ICollTokenPriceFeed(_collTokenPriceFeed);
-        collTokens.push(_collToken);
     }
 
     function updateCollTokenPriceFeed(ICollTokenPriceFeed _collTokenPriceFeed, IPriceFeed _nativeTokenPriceFeed) external onlyOwner {

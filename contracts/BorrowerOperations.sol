@@ -14,6 +14,7 @@ import "./Dependencies/CheckContract.sol";
 import "./Dependencies/Initializable.sol";
 import "./Dependencies/IERC20.sol";
 import "./Dependencies/SysConfig.sol";
+import "./Dependencies/SafeERC20.sol";
 
 contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, Initializable, IBorrowerOperations {
     string constant public NAME = "BorrowerOperations";
@@ -96,6 +97,8 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
     event TroveUpdated(address indexed _borrower, address _trove, uint _debt, uint _coll, uint stake, BorrowerOperation operation);
     event LUSDBorrowingFeePaid(address indexed _borrower, address _collToken, uint _LUSDFee);
     
+    using SafeERC20 for IERC20;
+
     constructor() public {
         _disableInitializers();
     }
@@ -172,7 +175,14 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
         if (isNativeToken(_collToken)) {
             _collAmount = msg.value;
         } else {
-            IERC20(_collToken).transferFrom(msg.sender, address(this), _collAmount);
+            require(msg.value == 0,"Invalid msg.value");
+            address borrower = msg.sender;
+            // check to ensure contract borrower implements ICollTokenReceiver interface
+            if (isContract(borrower)) {
+                ICollTokenReceiver(borrower).onReceive(_collToken, 0);
+            }
+
+            _collAmount = _safeTransferFrom(_collToken, _collAmount);
         }
         ITroveManager localTroveManager = _getTroveManager(_collToken);
         ContractsCache memory contractsCache = ContractsCache(localTroveManager, IActivePool(_getActivePool(_collToken)), lusdToken);
@@ -234,6 +244,14 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
 
         emit TroveUpdated(msg.sender, address(localTroveManager), vars.compositeDebt, _collAmount, vars.stake, BorrowerOperation.openTrove);
         emit LUSDBorrowingFeePaid(msg.sender, _collToken, vars.LUSDFee);
+    }
+
+    function _safeTransferFrom(address _collToken, uint _collAmount) internal returns (uint) {
+        uint initialBalance = IERC20(_collToken).balanceOf(address(this));
+        IERC20(_collToken).safeTransferFrom(msg.sender, address(this), _collAmount);
+        uint finalBalance = IERC20(_collToken).balanceOf(address(this));
+        uint actualReceived = finalBalance.sub(initialBalance);
+        return actualReceived;
     }
 
     // Send ETH as collateral to a trove
@@ -304,7 +322,7 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
             _collChange = msg.value;
         } else {
             if (_collChange > 0) {
-                IERC20(_collToken).transferFrom(msg.sender, address(this), _collChange);
+                _collChange = _safeTransferFrom(_collToken, _collChange);
             }
         }
 
@@ -450,7 +468,6 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
     }
 
     function burnLUSD(uint _amount) external override {
-        lusdToken.transferFrom(msg.sender, address(this), _amount);
         lusdToken.burn(msg.sender, _amount);
     }
 
@@ -548,7 +565,7 @@ contract BorrowerOperations is LiquityBase, OwnableUpgradeable, CheckContract, I
             (bool success, ) = address(_activePool).call{value: _amount}("");
             require(success, "BorrowerOps: Sending ETH to ActivePool failed");
         } else {
-            IERC20(_collToken).transfer(address(_activePool), _amount);
+            IERC20(_collToken).safeTransfer(address(_activePool), _amount);
             ICollTokenReceiver(address(_activePool)).onReceive(_collToken, _amount);
         }
     }
