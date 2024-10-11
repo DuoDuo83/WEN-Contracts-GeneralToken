@@ -6,6 +6,9 @@ import "./Interfaces/ILUSDToken.sol";
 import "./Dependencies/SafeMath.sol";
 import "./Dependencies/CheckContract.sol";
 import "./Dependencies/console.sol";
+import "./Dependencies/OwnableUpgradeable.sol";
+import "./Dependencies/Initializable.sol";
+
 /*
 *
 * Based upon OpenZeppelin's ERC20 contract:
@@ -24,7 +27,7 @@ import "./Dependencies/console.sol";
 * 2) sendToPool() and returnFromPool(): functions callable only Liquity core contracts, which move WEN tokens between Liquity <-> user.
 */
 
-contract LUSDToken is CheckContract, ILUSDToken {
+contract LUSDToken is CheckContract, ILUSDToken, OwnableUpgradeable, Initializable {
     using SafeMath for uint256;
     
     uint256 private _totalSupply;
@@ -92,6 +95,11 @@ contract LUSDToken is CheckContract, ILUSDToken {
         _HASHED_VERSION = hashedVersion;
         _CACHED_CHAIN_ID = _chainID();
         _CACHED_DOMAIN_SEPARATOR = _buildDomainSeparator(_TYPE_HASH, hashedName, hashedVersion);
+        _disableInitializers();
+    }
+
+    function initialize() initializer external {
+        __Ownable_init();
     }
 
     // --- Functions for intra-Liquity calls ---
