@@ -149,7 +149,7 @@ contract PegStability is OwnableUpgradeable, Initializable {
         uint256 fee = _calculateFee(stableTknAmountUSD, FeeDirection.OUT);
 
         require(WEN.balanceOf(msg.sender) >= stableTknAmountUSD + fee, "No enough WEN");
-        require(wenMinted >= stableTknAmountUSD, "Win minted underflow");
+        require(wenMinted >= stableTknAmountUSD, "WEN minted underflow");
 
         
         wenMinted = wenMinted.sub(stableTknAmountUSD);
@@ -193,7 +193,7 @@ contract PegStability is OwnableUpgradeable, Initializable {
         uint256 fee = _calculateFee(actualTransferAmtInUSD, FeeDirection.IN);
         uint256 wenToMint = actualTransferAmtInUSD - fee;
 
-        require(wenMinted + actualTransferAmtInUSD <= wenMintCap, "Wen mint cap reached");
+        require(wenMinted + actualTransferAmtInUSD <= wenMintCap, "WEN mint cap reached");
       
         wenMinted += actualTransferAmtInUSD;
 
@@ -316,7 +316,7 @@ contract PegStability is OwnableUpgradeable, Initializable {
         uint256 fee = _calculateFee(stableTknAmountUSD, FeeDirection.IN);
         uint256 wenToMint = stableTknAmountUSD - fee;
 
-        require(wenMinted + stableTknAmountUSD <= wenMintCap, "Wen mint cap reached");
+        require(wenMinted + stableTknAmountUSD <= wenMintCap, "WEN mint cap reached");
 
         return wenToMint;
     }
@@ -332,7 +332,7 @@ contract PegStability is OwnableUpgradeable, Initializable {
         uint256 stableTknAmountUSD = _previewTokenUSDAmount(stableTknAmount, FeeDirection.OUT);
         uint256 fee = _calculateFee(stableTknAmountUSD, FeeDirection.OUT);
 
-        require(wenMinted >= stableTknAmountUSD, "Wen minted underflow");
+        require(wenMinted >= stableTknAmountUSD, "WEN minted underflow");
 
         return stableTknAmountUSD + fee;
     }
